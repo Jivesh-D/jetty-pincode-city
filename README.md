@@ -13,6 +13,16 @@ uvicorn app.main:app --reload --port 8000
 
 Open [http://localhost:8000](http://localhost:8000) for the UI.
 
+## Deploy on Render
+
+Set the **Start Command** to:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Or use the included [`render.yaml`](render.yaml) blueprint. A root [`main.py`](main.py) shim also supports Render’s default `uvicorn main:app` if you cannot change the start command.
+
 ## API
 
 ### `POST /api/pincodes/lookup`

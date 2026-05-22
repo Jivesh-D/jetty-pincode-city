@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pincode City Lookup</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>Pincode City Lookup</h1>
+        <p class="subtitle">
+          Paste pincodes from Google Sheets, look up city and state, then copy
+          results back into a sheet.
+        </p>
+      </header>
+
+      <main class="main">
+        <section class="panel input-panel">
+          <label for="pincode-input" class="label">Pincodes</label>
+          <textarea
+            id="pincode-input"
+            class="textarea"
+            rows="10"
+            placeholder="Paste pincodes here — one per line, or comma / tab separated&#10;&#10;781001&#10;781002&#10;781003"
+          ></textarea>
+          <p id="parse-count" class="parse-count">0 pincodes parsed</p>
+          <div class="actions">
+            <button id="lookup-btn" type="button" class="btn btn-primary">
+              Lookup
+            </button>
+            <button id="clear-btn" type="button" class="btn btn-secondary">
+              Clear
+            </button>
+          </div>
+        </section>
+
+        <section class="panel results-panel">
+          <div class="results-header">
+            <h2 class="label">Results</h2>
+            <button
+              id="copy-btn"
+              type="button"
+              class="btn btn-secondary"
+              disabled
+            >
+              Copy results
+            </button>
+          </div>
+
+          <div id="error-banner" class="error-banner hidden" role="alert"></div>
+
+          <div class="table-wrap">
+            <table id="results-table" class="results-table">
+              <thead>
+                <tr>
+                  <th>Pincode</th>
+                  <th>City</th>
+                  <th>State</th>
+                  <th>Status</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="results-body">
+                <tr class="empty-row">
+                  <td colspan="5">Run a lookup to see results</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast hidden" aria-live="polite">Copied!</div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

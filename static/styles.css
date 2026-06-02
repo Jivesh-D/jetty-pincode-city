@@ -95,8 +95,18 @@ body {
 }
 
 .sales-main {
-  grid-template-columns: 1fr;
-  max-width: 640px;
+  margin-top: 0;
+}
+
+.tab-panel .main {
+  margin-top: 0;
+}
+
+@media (min-width: 900px) {
+  .main.sales-main {
+    grid-template-columns: 1fr;
+    max-width: 640px;
+  }
 }
 
 .help-text {

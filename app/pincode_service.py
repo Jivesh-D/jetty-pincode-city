@@ -17,7 +17,7 @@ UPSTREAM_SSL_VERIFY = os.getenv("UPSTREAM_SSL_VERIFY", "0").lower() in (
     "true",
     "yes",
 )
-MAX_BATCH_SIZE = 200
+MAX_BATCH_SIZE = 5000
 MAX_CONCURRENCY = 10
 REQUEST_TIMEOUT = 10.0
 

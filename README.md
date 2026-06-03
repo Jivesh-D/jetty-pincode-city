@@ -114,7 +114,7 @@ Returns `{"status": "ok"}`.
 
 ## Limits
 
-- Up to 200 pincodes per request
+- Up to 5000 pincodes per request
 - Up to 10 concurrent upstream calls per request
 
 ## Logging

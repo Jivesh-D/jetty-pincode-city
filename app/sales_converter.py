@@ -29,6 +29,7 @@ OUTPUT_COLUMNS = (
 
 DATE_SLASH_RE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
 EXCEL_EPOCH = date(1899, 12, 30)
+GRAND_TOTAL_LABEL = "GRAND TOTAL"
 
 
 def _cell_str(value: Any) -> str:
@@ -72,6 +73,12 @@ def _parse_order_date(value: Any) -> str | None:
             continue
 
     return None
+
+
+def _is_grand_total_row(fsn: str, title: str, city: str) -> bool:
+    return any(
+        _cell_str(value).upper() == GRAND_TOTAL_LABEL for value in (fsn, title, city)
+    )
 
 
 def _metric_number(value: Any) -> str:
@@ -177,6 +184,9 @@ def convert_sales_xlsx_to_csv(file_bytes: bytes) -> str:
         city = _cell_str(data_row[id_cols["CITY"]] if id_cols["CITY"] < len(data_row) else None)
 
         if not fsn and not title and not city:
+            continue
+
+        if _is_grand_total_row(fsn, title, city):
             continue
 
         for order_date, gmv_col, units_col in metric_pairs:

@@ -26,6 +26,8 @@ const noonColPlatformType = document.getElementById("noon-col-platform-type");
 const noonColQtySold = document.getElementById("noon-col-qty-sold");
 const noonColRevenue = document.getElementById("noon-col-revenue");
 const noonColItemId = document.getElementById("noon-col-item-id");
+const noonColProductName = document.getElementById("noon-col-product-name");
+const noonPlatformTypeFilter = document.getElementById("noon-platform-type-filter");
 const noonStartDate = document.getElementById("noon-start-date");
 const noonEndDate = document.getElementById("noon-end-date");
 const noonConvertBtn = document.getElementById("noon-convert-btn");
@@ -54,6 +56,7 @@ const NOON_COLUMN_SELECTS = [
   { el: noonColQtySold, target: "qty_sold" },
   { el: noonColRevenue, target: "revenue" },
   { el: noonColItemId, target: "item_id" },
+  { el: noonColProductName, target: "product_name" },
 ];
 
 const STATUS_LABELS = {
@@ -372,6 +375,7 @@ function resetNoonMapping() {
   }
   noonStartDate.value = "";
   noonEndDate.value = "";
+  noonPlatformTypeFilter.value = "Minutes";
 }
 
 function validateNoonForm() {
@@ -382,6 +386,7 @@ function validateNoonForm() {
   }
 
   if (!noonStartDate.value || !noonEndDate.value) return false;
+  if (!noonPlatformTypeFilter.value.trim()) return false;
   if (noonEndDate.value < noonStartDate.value) return false;
 
   return true;
@@ -481,6 +486,8 @@ async function runNoonConvert() {
   formData.append("qty_sold_col", noonColQtySold.value);
   formData.append("revenue_col", noonColRevenue.value);
   formData.append("item_id_col", noonColItemId.value);
+  formData.append("product_name_col", noonColProductName.value);
+  formData.append("platform_type_filter", noonPlatformTypeFilter.value.trim());
   formData.append("start_date", noonStartDate.value);
   formData.append("end_date", noonEndDate.value);
 
@@ -649,6 +656,7 @@ for (const { el } of NOON_COLUMN_SELECTS) {
 
 noonStartDate.addEventListener("change", updateNoonConvertButton);
 noonEndDate.addEventListener("change", updateNoonConvertButton);
+noonPlatformTypeFilter.addEventListener("input", updateNoonConvertButton);
 
 noonConvertBtn.addEventListener("click", runNoonConvert);
 noonClearBtn.addEventListener("click", clearNoonForm);

@@ -8,7 +8,14 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
 
-OUTPUT_COLUMNS = ("date", "platform_type", "item_id", "qty_sold", "revenue")
+OUTPUT_COLUMNS = (
+    "date",
+    "platform_type",
+    "item_id",
+    "product_name",
+    "qty_sold",
+    "revenue",
+)
 
 
 def read_csv_headers(content: bytes) -> list[str]:
@@ -59,11 +66,17 @@ def convert_noon_uae_csv(
     qty_sold_col: str,
     revenue_col: str,
     item_id_col: str,
+    product_name_col: str,
+    platform_type_filter: str,
     start_date: date,
     end_date: date,
 ) -> str:
     if end_date < start_date:
         raise ValueError("end_date must be on or after start_date")
+
+    platform_type_filter = platform_type_filter.strip()
+    if not platform_type_filter:
+        raise ValueError("platform_type filter keyword is required")
 
     text = content.decode("utf-8-sig")
     if not text.strip():
@@ -80,6 +93,7 @@ def convert_noon_uae_csv(
         "qty_sold": qty_sold_col,
         "revenue": revenue_col,
         "item_id": item_id_col,
+        "product_name": product_name_col,
     }
     missing = [name for name, col in required_cols.items() if col not in headers]
     if missing:
@@ -87,8 +101,8 @@ def convert_noon_uae_csv(
             f"Mapped columns not found in CSV: {', '.join(missing)}"
         )
 
-    aggregated: dict[tuple[str, str], dict[str, float]] = defaultdict(
-        lambda: {"qty_sold": 0.0, "revenue": 0.0}
+    aggregated: dict[tuple[str, str], dict[str, Any]] = defaultdict(
+        lambda: {"qty_sold": 0.0, "revenue": 0.0, "product_name": ""}
     )
 
     for row_num, row in enumerate(reader, start=2):
@@ -96,7 +110,10 @@ def convert_noon_uae_csv(
         platform_type = (row.get(header_map[platform_type_col]) or "").strip()
         if not item_id or not platform_type:
             continue
+        if platform_type != platform_type_filter:
+            continue
 
+        product_name = (row.get(header_map[product_name_col]) or "").strip()
         qty = _parse_number(
             row.get(header_map[qty_sold_col]),
             field_name=qty_sold_col,
@@ -108,8 +125,11 @@ def convert_noon_uae_csv(
             row_num=row_num,
         )
         key = (item_id, platform_type)
-        aggregated[key]["qty_sold"] += qty
-        aggregated[key]["revenue"] += rev
+        bucket = aggregated[key]
+        bucket["qty_sold"] += qty
+        bucket["revenue"] += rev
+        if not bucket["product_name"] and product_name:
+            bucket["product_name"] = product_name
 
     days: list[date] = []
     current = start_date
@@ -128,6 +148,7 @@ def convert_noon_uae_csv(
                     "date": day.isoformat(),
                     "platform_type": platform_type,
                     "item_id": item_id,
+                    "product_name": totals["product_name"],
                     "qty_sold": daily_qty,
                     "revenue": daily_revenue,
                 }

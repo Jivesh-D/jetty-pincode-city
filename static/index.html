@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jetty Tools</title>
-    <link rel="stylesheet" href="/static/styles.css?v=1.2.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=1.2.1" />
   </head>
   <body>
     <div class="app">
@@ -160,9 +160,11 @@
             <p class="help-text">
               Upload a CSV with any column layout. After the file is read, map
               your columns to <strong>platform_type</strong>,
-              <strong>qty_sold</strong>, <strong>revenue</strong>, and
-              <strong>item_id</strong>, then choose a date range for daily
-              distribution.
+              <strong>qty_sold</strong>, <strong>revenue</strong>,
+              <strong>item_id</strong>, and <strong>product_name</strong>,
+              then choose a date range. Only rows where
+              <strong>platform_type</strong> matches your filter keyword are
+              included in the output.
             </p>
 
             <input
@@ -202,6 +204,24 @@
               <select id="noon-col-item-id" class="field-input" disabled>
                 <option value="">Select column…</option>
               </select>
+
+              <label for="noon-col-product-name" class="label"
+                >product_name column</label
+              >
+              <select id="noon-col-product-name" class="field-input" disabled>
+                <option value="">Select column…</option>
+              </select>
+
+              <label for="noon-platform-type-filter" class="label"
+                >platform_type filter keyword</label
+              >
+              <input
+                id="noon-platform-type-filter"
+                class="field-input"
+                type="text"
+                placeholder="e.g. Minutes"
+                value="Minutes"
+              />
 
               <div class="date-range">
                 <div class="date-field">
@@ -251,6 +271,6 @@
 
     <div id="toast" class="toast hidden" aria-live="polite">Copied!</div>
 
-    <script src="/static/app.js?v=1.2.0"></script>
+    <script src="/static/app.js?v=1.2.2"></script>
   </body>
 </html>

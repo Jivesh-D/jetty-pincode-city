@@ -106,6 +106,8 @@ async def noon_uae_convert(
     qty_sold_col: str = Form(...),
     revenue_col: str = Form(...),
     item_id_col: str = Form(...),
+    product_name_col: str = Form(...),
+    platform_type_filter: str = Form(...),
     start_date: str = Form(...),
     end_date: str = Form(...),
 ) -> Response:
@@ -124,6 +126,8 @@ async def noon_uae_convert(
             qty_sold_col=qty_sold_col,
             revenue_col=revenue_col,
             item_id_col=item_id_col,
+            product_name_col=product_name_col,
+            platform_type_filter=platform_type_filter,
             start_date=parsed_start,
             end_date=parsed_end,
         )

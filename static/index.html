@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jetty Tools</title>
-    <link rel="stylesheet" href="/static/styles.css?v=1.1.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=1.2.0" />
   </head>
   <body>
     <div class="app">
@@ -32,6 +32,14 @@
           data-tab="sales"
         >
           FKMin Sales Converter
+        </button>
+        <button
+          id="tab-btn-noon-uae"
+          type="button"
+          class="tab-btn"
+          data-tab="noon-uae"
+        >
+          NoonUAE Sales Converter
         </button>
       </nav>
 
@@ -144,10 +152,105 @@
           </section>
         </main>
       </div>
+
+      <div id="tab-noon-uae" class="tab-panel hidden">
+        <main class="main sales-main">
+          <section class="panel sales-panel">
+            <label for="noon-file-input" class="label">Sales CSV</label>
+            <p class="help-text">
+              Upload a CSV with any column layout. After the file is read, map
+              your columns to <strong>platform_type</strong>,
+              <strong>qty_sold</strong>, <strong>revenue</strong>, and
+              <strong>item_id</strong>, then choose a date range for daily
+              distribution.
+            </p>
+
+            <input
+              id="noon-file-input"
+              class="file-input"
+              type="file"
+              accept=".csv,text/csv"
+            />
+
+            <p id="noon-file-info" class="parse-count">No file selected</p>
+
+            <div id="noon-mapping-section" class="mapping-grid hidden">
+              <label for="noon-col-platform-type" class="label"
+                >platform_type column</label
+              >
+              <select
+                id="noon-col-platform-type"
+                class="field-input"
+                disabled
+              >
+                <option value="">Select column…</option>
+              </select>
+
+              <label for="noon-col-qty-sold" class="label"
+                >qty_sold column</label
+              >
+              <select id="noon-col-qty-sold" class="field-input" disabled>
+                <option value="">Select column…</option>
+              </select>
+
+              <label for="noon-col-revenue" class="label">revenue column</label>
+              <select id="noon-col-revenue" class="field-input" disabled>
+                <option value="">Select column…</option>
+              </select>
+
+              <label for="noon-col-item-id" class="label">item_id column</label>
+              <select id="noon-col-item-id" class="field-input" disabled>
+                <option value="">Select column…</option>
+              </select>
+
+              <div class="date-range">
+                <div class="date-field">
+                  <label for="noon-start-date" class="label">start_Date</label>
+                  <input
+                    id="noon-start-date"
+                    class="field-input"
+                    type="date"
+                  />
+                </div>
+                <div class="date-field">
+                  <label for="noon-end-date" class="label">end_Date</label>
+                  <input id="noon-end-date" class="field-input" type="date" />
+                </div>
+              </div>
+            </div>
+
+            <div
+              id="noon-error-banner"
+              class="error-banner hidden"
+              role="alert"
+            ></div>
+
+            <p id="noon-status" class="status-line hidden" aria-live="polite"></p>
+
+            <div class="actions">
+              <button
+                id="noon-convert-btn"
+                type="button"
+                class="btn btn-primary"
+                disabled
+              >
+                Convert &amp; download CSV
+              </button>
+              <button
+                id="noon-clear-btn"
+                type="button"
+                class="btn btn-secondary"
+              >
+                Clear
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
 
     <div id="toast" class="toast hidden" aria-live="polite">Copied!</div>
 
-    <script src="/static/app.js?v=1.1.0"></script>
+    <script src="/static/app.js?v=1.2.0"></script>
   </body>
 </html>

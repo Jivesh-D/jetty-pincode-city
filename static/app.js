@@ -9,24 +9,52 @@ const toast = document.getElementById("toast");
 const subtitleEl = document.getElementById("subtitle");
 const tabBtnPincode = document.getElementById("tab-btn-pincode");
 const tabBtnSales = document.getElementById("tab-btn-sales");
+const tabBtnNoonUae = document.getElementById("tab-btn-noon-uae");
 const tabPincode = document.getElementById("tab-pincode");
 const tabSales = document.getElementById("tab-sales");
+const tabNoonUae = document.getElementById("tab-noon-uae");
 const salesFileInput = document.getElementById("sales-file-input");
 const salesFileInfo = document.getElementById("sales-file-info");
 const salesConvertBtn = document.getElementById("sales-convert-btn");
 const salesClearBtn = document.getElementById("sales-clear-btn");
 const salesErrorBanner = document.getElementById("sales-error-banner");
 const salesStatus = document.getElementById("sales-status");
+const noonFileInput = document.getElementById("noon-file-input");
+const noonFileInfo = document.getElementById("noon-file-info");
+const noonMappingSection = document.getElementById("noon-mapping-section");
+const noonColPlatformType = document.getElementById("noon-col-platform-type");
+const noonColQtySold = document.getElementById("noon-col-qty-sold");
+const noonColRevenue = document.getElementById("noon-col-revenue");
+const noonColItemId = document.getElementById("noon-col-item-id");
+const noonStartDate = document.getElementById("noon-start-date");
+const noonEndDate = document.getElementById("noon-end-date");
+const noonConvertBtn = document.getElementById("noon-convert-btn");
+const noonClearBtn = document.getElementById("noon-clear-btn");
+const noonErrorBanner = document.getElementById("noon-error-banner");
+const noonStatus = document.getElementById("noon-status");
 
 let lastResults = [];
 let selectedSalesFile = null;
+let selectedNoonFile = null;
+let detectedNoonColumns = [];
+
+const TABS = ["pincode", "sales", "noon-uae"];
 
 const TAB_SUBTITLES = {
   pincode:
     "Paste pincodes from Google Sheets, look up city and state, then copy results back into a sheet.",
   sales:
     "Upload a Sales workbook (.xlsx) and download a CSV with the required schema.",
+  "noon-uae":
+    "Upload a sales CSV, map columns, spread totals across a date range, and download normalized output.",
 };
+
+const NOON_COLUMN_SELECTS = [
+  { el: noonColPlatformType, target: "platform_type" },
+  { el: noonColQtySold, target: "qty_sold" },
+  { el: noonColRevenue, target: "revenue" },
+  { el: noonColItemId, target: "item_id" },
+];
 
 const STATUS_LABELS = {
   ok: "OK",
@@ -170,11 +198,23 @@ function showToast(message = "Copied!") {
 }
 
 function switchTab(tabName) {
-  const isPincode = tabName === "pincode";
-  tabBtnPincode.classList.toggle("active", isPincode);
-  tabBtnSales.classList.toggle("active", !isPincode);
-  tabPincode.classList.toggle("hidden", !isPincode);
-  tabSales.classList.toggle("hidden", isPincode);
+  const tabButtons = {
+    pincode: tabBtnPincode,
+    sales: tabBtnSales,
+    "noon-uae": tabBtnNoonUae,
+  };
+  const tabPanels = {
+    pincode: tabPincode,
+    sales: tabSales,
+    "noon-uae": tabNoonUae,
+  };
+
+  for (const name of TABS) {
+    const isActive = name === tabName;
+    tabButtons[name].classList.toggle("active", isActive);
+    tabPanels[name].classList.toggle("hidden", !isActive);
+  }
+
   subtitleEl.textContent = TAB_SUBTITLES[tabName];
 }
 
@@ -288,6 +328,207 @@ async function runSalesConvert() {
   }
 }
 
+function showNoonError(message) {
+  noonErrorBanner.textContent = message;
+  noonErrorBanner.classList.remove("hidden");
+}
+
+function hideNoonError() {
+  noonErrorBanner.classList.add("hidden");
+  noonErrorBanner.textContent = "";
+}
+
+function hideNoonStatus() {
+  noonStatus.classList.add("hidden");
+  noonStatus.textContent = "";
+}
+
+function showNoonStatus(message) {
+  noonStatus.textContent = message;
+  noonStatus.classList.remove("hidden");
+}
+
+function populateNoonSelect(selectEl, columns, preferredName) {
+  selectEl.innerHTML = '<option value="">Select column…</option>';
+  for (const col of columns) {
+    const option = document.createElement("option");
+    option.value = col;
+    option.textContent = col;
+    selectEl.appendChild(option);
+  }
+  if (preferredName && columns.includes(preferredName)) {
+    selectEl.value = preferredName;
+  }
+  selectEl.disabled = false;
+}
+
+function resetNoonMapping() {
+  detectedNoonColumns = [];
+  noonMappingSection.classList.add("hidden");
+  for (const { el } of NOON_COLUMN_SELECTS) {
+    el.innerHTML = '<option value="">Select column…</option>';
+    el.value = "";
+    el.disabled = true;
+  }
+  noonStartDate.value = "";
+  noonEndDate.value = "";
+}
+
+function validateNoonForm() {
+  if (!selectedNoonFile || !detectedNoonColumns.length) return false;
+
+  for (const { el } of NOON_COLUMN_SELECTS) {
+    if (!el.value) return false;
+  }
+
+  if (!noonStartDate.value || !noonEndDate.value) return false;
+  if (noonEndDate.value < noonStartDate.value) return false;
+
+  return true;
+}
+
+function updateNoonFileInfo() {
+  if (!selectedNoonFile) {
+    noonFileInfo.textContent = "No file selected";
+    noonConvertBtn.disabled = true;
+    return;
+  }
+
+  noonFileInfo.textContent = `${selectedNoonFile.name} (${formatFileSize(selectedNoonFile.size)})`;
+  noonConvertBtn.disabled = !validateNoonForm();
+}
+
+function updateNoonConvertButton() {
+  noonConvertBtn.disabled = !validateNoonForm();
+}
+
+async function fetchNoonHeaders() {
+  if (!selectedNoonFile) return;
+
+  hideNoonError();
+  hideNoonStatus();
+  resetNoonMapping();
+  noonFileInfo.textContent = `${selectedNoonFile.name} (${formatFileSize(selectedNoonFile.size)}) — reading columns…`;
+  noonConvertBtn.disabled = true;
+
+  const formData = new FormData();
+  formData.append("file", selectedNoonFile);
+
+  try {
+    const res = await fetch("/api/noon-uae/headers", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : Array.isArray(data.detail)
+            ? data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+            : "Could not read CSV headers";
+      selectedNoonFile = null;
+      noonFileInput.value = "";
+      showNoonError(detail);
+      updateNoonFileInfo();
+      return;
+    }
+
+    detectedNoonColumns = data.columns || [];
+    if (!detectedNoonColumns.length) {
+      selectedNoonFile = null;
+      noonFileInput.value = "";
+      showNoonError("No columns found in the CSV header row.");
+      updateNoonFileInfo();
+      return;
+    }
+
+    for (const { el, target } of NOON_COLUMN_SELECTS) {
+      populateNoonSelect(el, detectedNoonColumns, target);
+    }
+
+    noonMappingSection.classList.remove("hidden");
+    noonFileInfo.textContent = `${selectedNoonFile.name} (${formatFileSize(selectedNoonFile.size)}) — ${detectedNoonColumns.length} columns detected`;
+    updateNoonConvertButton();
+  } catch (err) {
+    selectedNoonFile = null;
+    noonFileInput.value = "";
+    showNoonError(err.message || "Network error. Is the server running?");
+    updateNoonFileInfo();
+  }
+}
+
+async function runNoonConvert() {
+  if (!validateNoonForm()) {
+    if (noonStartDate.value && noonEndDate.value && noonEndDate.value < noonStartDate.value) {
+      showNoonError("end_Date must be on or after start_Date.");
+    } else {
+      showNoonError("Choose a file, map all columns, and set both dates.");
+    }
+    return;
+  }
+
+  hideNoonError();
+  hideNoonStatus();
+  noonConvertBtn.disabled = true;
+  noonConvertBtn.classList.add("loading");
+
+  const formData = new FormData();
+  formData.append("file", selectedNoonFile);
+  formData.append("platform_type_col", noonColPlatformType.value);
+  formData.append("qty_sold_col", noonColQtySold.value);
+  formData.append("revenue_col", noonColRevenue.value);
+  formData.append("item_id_col", noonColItemId.value);
+  formData.append("start_date", noonStartDate.value);
+  formData.append("end_date", noonEndDate.value);
+
+  try {
+    const res = await fetch("/api/noon-uae/convert", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : Array.isArray(data.detail)
+            ? data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+            : "Conversion failed";
+      showNoonError(detail);
+      return;
+    }
+
+    const blob = await res.blob();
+    const filename = parseContentDispositionFilename(
+      res.headers.get("Content-Disposition")
+    );
+    const csvText = await blob.text();
+    const rowCount = Math.max(0, csvText.trim().split("\n").length - 1);
+
+    downloadBlob(new Blob([csvText], { type: "text/csv" }), filename);
+    showNoonStatus(`Download started — ${rowCount} data rows in CSV.`);
+    showToast("CSV downloaded");
+  } catch (err) {
+    showNoonError(err.message || "Network error. Is the server running?");
+  } finally {
+    noonConvertBtn.disabled = !validateNoonForm();
+    noonConvertBtn.classList.remove("loading");
+  }
+}
+
+function clearNoonForm() {
+  selectedNoonFile = null;
+  noonFileInput.value = "";
+  hideNoonError();
+  hideNoonStatus();
+  resetNoonMapping();
+  updateNoonFileInfo();
+}
+
 async function runLookup() {
   const pincodes = parsePincodes(inputEl.value);
   hideError();
@@ -356,6 +597,7 @@ copyBtn.addEventListener("click", async () => {
 
 tabBtnPincode.addEventListener("click", () => switchTab("pincode"));
 tabBtnSales.addEventListener("click", () => switchTab("sales"));
+tabBtnNoonUae.addEventListener("click", () => switchTab("noon-uae"));
 
 salesFileInput.addEventListener("change", () => {
   hideSalesError();
@@ -380,5 +622,35 @@ salesClearBtn.addEventListener("click", () => {
   hideSalesStatus();
   updateSalesFileInfo();
 });
+
+noonFileInput.addEventListener("change", () => {
+  hideNoonError();
+  hideNoonStatus();
+  selectedNoonFile = noonFileInput.files?.[0] || null;
+
+  if (selectedNoonFile && !selectedNoonFile.name.toLowerCase().endsWith(".csv")) {
+    selectedNoonFile = null;
+    noonFileInput.value = "";
+    showNoonError("Please choose a .csv file.");
+    clearNoonForm();
+    return;
+  }
+
+  if (selectedNoonFile) {
+    fetchNoonHeaders();
+  } else {
+    clearNoonForm();
+  }
+});
+
+for (const { el } of NOON_COLUMN_SELECTS) {
+  el.addEventListener("change", updateNoonConvertButton);
+}
+
+noonStartDate.addEventListener("change", updateNoonConvertButton);
+noonEndDate.addEventListener("change", updateNoonConvertButton);
+
+noonConvertBtn.addEventListener("click", runNoonConvert);
+noonClearBtn.addEventListener("click", clearNoonForm);
 
 updateParseCount();

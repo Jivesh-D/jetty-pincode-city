@@ -15,3 +15,7 @@ class PincodeResult(BaseModel):
 
 class PincodeLookupResponse(BaseModel):
     results: list[PincodeResult]
+
+
+class NoonUaeHeadersResponse(BaseModel):
+    columns: list[str]

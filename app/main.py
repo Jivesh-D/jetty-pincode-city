@@ -5,6 +5,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.city_service import lookup_coordinates
 from app.noon_uae_converter import (
     convert_noon_uae_csv,
     parse_date_param,
@@ -13,6 +14,9 @@ from app.noon_uae_converter import (
 from app.pincode_service import lookup_pincodes
 from app.sales_converter import convert_sales_xlsx_to_csv
 from app.schemas import (
+    CityLookupRequest,
+    CityLookupResponse,
+    CityResult,
     NoonUaeHeadersResponse,
     PincodeLookupRequest,
     PincodeLookupResponse,
@@ -51,6 +55,34 @@ async def pincode_lookup(body: PincodeLookupRequest) -> PincodeLookupResponse:
                 pincode=r.pincode,
                 city=r.city,
                 state=r.state,
+                status=r.status,
+                message=r.message,
+            )
+            for r in results
+        ]
+    )
+
+
+@app.post("/api/city/lookup", response_model=CityLookupResponse)
+async def city_lookup(body: CityLookupRequest) -> CityLookupResponse:
+    logger.info("POST /api/city/lookup count=%d", len(body.coordinates))
+    try:
+        results = await lookup_coordinates(body.coordinates)
+    except ValueError as exc:
+        logger.warning("lookup rejected: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return CityLookupResponse(
+        results=[
+            CityResult(
+                input=r.raw,
+                latitude=f"{r.latitude:.6f}" if r.latitude is not None else "",
+                longitude=f"{r.longitude:.6f}" if r.longitude is not None else "",
+                city=r.city,
+                locality=r.locality,
+                postcode=r.postcode,
+                plus_code=r.plus_code,
+                principal_subdivision=r.principal_subdivision,
                 status=r.status,
                 message=r.message,
             )

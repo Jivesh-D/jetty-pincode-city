@@ -10,9 +10,18 @@ const subtitleEl = document.getElementById("subtitle");
 const tabBtnPincode = document.getElementById("tab-btn-pincode");
 const tabBtnSales = document.getElementById("tab-btn-sales");
 const tabBtnNoonUae = document.getElementById("tab-btn-noon-uae");
+const tabBtnCity = document.getElementById("tab-btn-city");
 const tabPincode = document.getElementById("tab-pincode");
 const tabSales = document.getElementById("tab-sales");
 const tabNoonUae = document.getElementById("tab-noon-uae");
+const tabCity = document.getElementById("tab-city");
+const cityInputEl = document.getElementById("city-input");
+const cityParseCountEl = document.getElementById("city-parse-count");
+const cityLookupBtn = document.getElementById("city-lookup-btn");
+const cityClearBtn = document.getElementById("city-clear-btn");
+const cityCopyBtn = document.getElementById("city-copy-btn");
+const cityResultsBody = document.getElementById("city-results-body");
+const cityErrorBanner = document.getElementById("city-error-banner");
 const salesFileInput = document.getElementById("sales-file-input");
 const salesFileInfo = document.getElementById("sales-file-info");
 const salesConvertBtn = document.getElementById("sales-convert-btn");
@@ -36,11 +45,12 @@ const noonErrorBanner = document.getElementById("noon-error-banner");
 const noonStatus = document.getElementById("noon-status");
 
 let lastResults = [];
+let lastCityResults = [];
 let selectedSalesFile = null;
 let selectedNoonFile = null;
 let detectedNoonColumns = [];
 
-const TABS = ["pincode", "sales", "noon-uae"];
+const TABS = ["pincode", "sales", "noon-uae", "city"];
 
 const TAB_SUBTITLES = {
   pincode:
@@ -49,6 +59,8 @@ const TAB_SUBTITLES = {
     "Upload a Sales workbook (.xlsx) and download a CSV with the required schema.",
   "noon-uae":
     "Upload a sales CSV, map columns, spread totals across a date range, and download normalized output.",
+  city:
+    "Paste latitude,longitude pairs, look up city, locality, postcode and state, then copy results back into a sheet.",
 };
 
 const NOON_COLUMN_SELECTS = [
@@ -143,7 +155,7 @@ function renderResults(results) {
           <td class="pincode-col">${escapeHtml(row.pincode)}</td>
           <td>${escapeHtml(row.city ?? "")}</td>
           <td>${escapeHtml(row.state ?? "")}</td>
-          <td class="${statusClass(row.status)}">${escapeHtml(label)}</td>
+          <td><span class="status-pill ${statusClass(row.status)}">${escapeHtml(label)}</span></td>
           <td class="details-col">${escapeHtml(row.message ?? "")}</td>
         </tr>`;
     })
@@ -177,6 +189,132 @@ function resultsToTsv(results) {
   return lines.join("\n");
 }
 
+function parseCoordinates(text) {
+  if (!text.trim()) return [];
+
+  return text
+    .split(/[\n\r]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function updateCityParseCount() {
+  const parsed = parseCoordinates(cityInputEl.value);
+  const label = parsed.length === 1 ? "coordinate pair" : "coordinate pairs";
+  cityParseCountEl.textContent = `${parsed.length} ${label} parsed`;
+}
+
+function showCityError(message) {
+  cityErrorBanner.textContent = message;
+  cityErrorBanner.classList.remove("hidden");
+}
+
+function hideCityError() {
+  cityErrorBanner.classList.add("hidden");
+  cityErrorBanner.textContent = "";
+}
+
+function renderCityResults(results) {
+  lastCityResults = results;
+
+  if (!results.length) {
+    cityResultsBody.innerHTML = `
+      <tr class="empty-row">
+        <td colspan="9">Run a lookup to see results</td>
+      </tr>`;
+    cityCopyBtn.disabled = true;
+    return;
+  }
+
+  cityResultsBody.innerHTML = results
+    .map((row) => {
+      const label = STATUS_LABELS[row.status] || row.status;
+      const latDisplay = row.latitude || row.input || "";
+      return `
+        <tr>
+          <td class="pincode-col">${escapeHtml(latDisplay)}</td>
+          <td>${escapeHtml(row.longitude ?? "")}</td>
+          <td>${escapeHtml(row.city ?? "")}</td>
+          <td>${escapeHtml(row.locality ?? "")}</td>
+          <td>${escapeHtml(row.postcode ?? "")}</td>
+          <td>${escapeHtml(row.plus_code ?? "")}</td>
+          <td>${escapeHtml(row.principal_subdivision ?? "")}</td>
+          <td><span class="status-pill ${statusClass(row.status)}">${escapeHtml(label)}</span></td>
+          <td class="details-col">${escapeHtml(row.message ?? "")}</td>
+        </tr>`;
+    })
+    .join("");
+
+  cityCopyBtn.disabled = false;
+}
+
+function cityResultsToTsv(results) {
+  const lines = [
+    "Latitude\tLongitude\tCity\tLocality\tPostcode\tPlus Code\tState\tStatus\tDetails",
+  ];
+  for (const row of results) {
+    const status = STATUS_LABELS[row.status] || row.status;
+    lines.push(
+      [
+        row.latitude || row.input || "",
+        row.longitude ?? "",
+        row.city ?? "",
+        row.locality ?? "",
+        row.postcode ?? "",
+        row.plus_code ?? "",
+        row.principal_subdivision ?? "",
+        status,
+        row.message ?? "",
+      ].join("\t")
+    );
+  }
+  return lines.join("\n");
+}
+
+async function runCityLookup() {
+  const coordinates = parseCoordinates(cityInputEl.value);
+  hideCityError();
+
+  if (!coordinates.length) {
+    showCityError("Enter at least one 'latitude,longitude' pair.");
+    renderCityResults([]);
+    return;
+  }
+
+  cityLookupBtn.disabled = true;
+  cityLookupBtn.classList.add("loading");
+
+  try {
+    const res = await fetch("/api/city/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coordinates }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : Array.isArray(data.detail)
+            ? data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+            : "Lookup failed";
+      showCityError(detail);
+      renderCityResults([]);
+      return;
+    }
+
+    renderCityResults(data.results || []);
+  } catch (err) {
+    showCityError(err.message || "Network error. Is the server running?");
+    renderCityResults([]);
+  } finally {
+    cityLookupBtn.disabled = false;
+    cityLookupBtn.classList.remove("loading");
+  }
+}
+
 async function copyToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -205,11 +343,13 @@ function switchTab(tabName) {
     pincode: tabBtnPincode,
     sales: tabBtnSales,
     "noon-uae": tabBtnNoonUae,
+    city: tabBtnCity,
   };
   const tabPanels = {
     pincode: tabPincode,
     sales: tabSales,
     "noon-uae": tabNoonUae,
+    city: tabCity,
   };
 
   for (const name of TABS) {
@@ -605,6 +745,7 @@ copyBtn.addEventListener("click", async () => {
 tabBtnPincode.addEventListener("click", () => switchTab("pincode"));
 tabBtnSales.addEventListener("click", () => switchTab("sales"));
 tabBtnNoonUae.addEventListener("click", () => switchTab("noon-uae"));
+tabBtnCity.addEventListener("click", () => switchTab("city"));
 
 salesFileInput.addEventListener("change", () => {
   hideSalesError();
@@ -661,4 +802,27 @@ noonPlatformTypeFilter.addEventListener("input", updateNoonConvertButton);
 noonConvertBtn.addEventListener("click", runNoonConvert);
 noonClearBtn.addEventListener("click", clearNoonForm);
 
+cityInputEl.addEventListener("input", updateCityParseCount);
+cityInputEl.addEventListener("paste", () => setTimeout(updateCityParseCount, 0));
+
+cityLookupBtn.addEventListener("click", runCityLookup);
+
+cityClearBtn.addEventListener("click", () => {
+  cityInputEl.value = "";
+  hideCityError();
+  updateCityParseCount();
+  renderCityResults([]);
+});
+
+cityCopyBtn.addEventListener("click", async () => {
+  if (!lastCityResults.length) return;
+  try {
+    await copyToClipboard(cityResultsToTsv(lastCityResults));
+    showToast("Copied!");
+  } catch {
+    showCityError("Could not copy to clipboard.");
+  }
+});
+
 updateParseCount();
+updateCityParseCount();

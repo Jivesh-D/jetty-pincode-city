@@ -136,6 +136,25 @@ The UI **Details** column shows the same error message returned in the API respo
 UPSTREAM_SSL_VERIFY=1 uvicorn app.main:app --reload --port 8000
 ```
 
+## GroundTruth (reverse geocoding)
+
+The **GroundTruth** tab looks up city/locality/postcode/plus code for pasted
+`latitude,longitude` pairs via BigDataCloud's server-side reverse-geocode API.
+This endpoint requires a free API key (their `-client` endpoint is
+CORS-enabled for browser calls only and rejects server-side traffic with a
+400).
+
+1. Get a free key at <https://www.bigdatacloud.com/>
+2. Set it as an environment variable before starting the server:
+
+```bash
+BIGDATACLOUD_API_KEY=your-key-here uvicorn app.main:app --reload --port 8000
+```
+
+On Render, set `BIGDATACLOUD_API_KEY` under the service's **Environment**
+tab (or via the `render.yaml` blueprint, which declares it as a required
+manually-set variable).
+
 ## Data source
 
-Results are fetched live from the public postal API. Availability and accuracy depend on that third-party service.
+Results are fetched live from public third-party APIs. Availability and accuracy depend on those services.

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -7,7 +8,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-UPSTREAM_BASE = "https://api.bigdatacloud.net/data/reverse-geocode-client"
+# The free "-client" endpoint is CORS-enabled for direct browser calls only;
+# it rejects server-side callers (like this backend) with a 400. The
+# server-side endpoint requires a free API key from bigdatacloud.com.
+UPSTREAM_BASE = "https://api.bigdatacloud.net/data/reverse-geocode"
+BIGDATACLOUD_API_KEY = os.getenv("BIGDATACLOUD_API_KEY", "")
 MAX_BATCH_SIZE = 5000
 MAX_CONCURRENCY = 10
 REQUEST_TIMEOUT = 10.0
@@ -75,7 +80,12 @@ async def _fetch_coordinate(
     lat: float,
     lon: float,
 ) -> LookupResult:
-    params = {"latitude": lat, "longitude": lon, "localityLanguage": "en"}
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "localityLanguage": "en",
+        "key": BIGDATACLOUD_API_KEY,
+    }
     async with semaphore:
         logger.info("upstream GET %s params=%s", UPSTREAM_BASE, params)
         try:
@@ -161,6 +171,13 @@ async def _fetch_coordinate(
 async def lookup_coordinates(raw_lines: list[str]) -> list[LookupResult]:
     if len(raw_lines) > MAX_BATCH_SIZE:
         raise ValueError(f"Maximum {MAX_BATCH_SIZE} coordinate pairs per request")
+
+    if not BIGDATACLOUD_API_KEY:
+        raise ValueError(
+            "BIGDATACLOUD_API_KEY is not configured on the server. "
+            "Get a free key at https://www.bigdatacloud.com/ and set it as an "
+            "environment variable."
+        )
 
     parsed: list[tuple[float, float] | None] = [_parse_coordinate(r) for r in raw_lines]
 

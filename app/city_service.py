@@ -98,12 +98,11 @@ async def _fetch_coordinate(
                 exc.response.status_code,
                 body_preview,
             )
-            return _error_result(
-                raw,
-                lat,
-                lon,
-                f"Upstream HTTP {exc.response.status_code}",
-            )
+            detail = body_preview.strip()
+            message = f"Upstream HTTP {exc.response.status_code}"
+            if detail:
+                message = f"{message}: {detail[:150]}"
+            return _error_result(raw, lat, lon, message)
         except httpx.RequestError as exc:
             logger.exception("upstream coordinate=%s request failed: %s", raw, exc)
             return _error_result(raw, lat, lon, str(exc) or "Upstream request failed")

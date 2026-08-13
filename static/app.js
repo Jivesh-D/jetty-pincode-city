@@ -998,25 +998,45 @@ function posClearLinks() {
   if (posLinkLayer) posLinkLayer.clearLayers();
 }
 
+// Sampled quadratic bezier between two points, bowing gently to the left of
+// the direction of travel so a fan of links swirls instead of reading as a
+// harsh straight-line starburst. Computed in an equirectangular plane
+// (longitude scaled by cos of the mid-latitude) so the bow looks circular on
+// screen rather than skewed.
+function posArcPoints(fromLat, fromLon, toLat, toLon) {
+  const cosMid = Math.cos((((fromLat + toLat) / 2) * Math.PI) / 180);
+  const x1 = fromLon * cosMid;
+  const y1 = fromLat;
+  const x2 = toLon * cosMid;
+  const y2 = toLat;
+  const bow = 0.12;
+  const controlX = (x1 + x2) / 2 - (y2 - y1) * bow;
+  const controlY = (y1 + y2) / 2 + (x2 - x1) * bow;
+
+  const points = [];
+  const STEPS = 24;
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const x = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * controlX + t * t * x2;
+    const y = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * controlY + t * t * y2;
+    points.push([y, x / cosMid]);
+  }
+  return points;
+}
+
 function posDrawLinks(place, color) {
   posClearLinks();
   const members = posLocalitiesByPlace[place.id] || [];
   for (const member of members) {
-    L.polyline(
-      [
-        [place.lat, place.lon],
-        [member.lat, member.lon],
-      ],
-      {
-        color,
-        weight: 1.2,
-        opacity: 0.5,
-        interactive: false,
-        // Long hauls (label-based or no-warehouse cities) drawn dashed so
-        // they read as inferred rather than local.
-        dashArray: member.dist_km > 50 ? "5 6" : null,
-      }
-    ).addTo(posLinkLayer);
+    L.polyline(posArcPoints(place.lat, place.lon, member.lat, member.lon), {
+      color,
+      weight: 1.2,
+      opacity: 0.5,
+      interactive: false,
+      // Long hauls (label-based or no-warehouse cities) drawn dashed so
+      // they read as inferred rather than local.
+      dashArray: member.dist_km > 50 ? "5 6" : null,
+    }).addTo(posLinkLayer);
   }
 }
 

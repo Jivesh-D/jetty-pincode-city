@@ -22,7 +22,7 @@
       integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc="
       crossorigin=""
     />
-    <link rel="stylesheet" href="/static/styles.css?v=1.7.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=1.8.0" />
   </head>
   <body>
     <div class="app">
@@ -420,9 +420,16 @@
                   <span class="map-layer-label">Localities</span>
                   <span class="map-count" id="pos-count-localities">&ndash;</span>
                 </label>
+                <label class="map-layer" for="pos-toggle-areas">
+                  <input type="checkbox" id="pos-toggle-areas" checked />
+                  <span class="map-swatch areas" aria-hidden="true"></span>
+                  <span class="map-layer-label">Supply areas</span>
+                  <span class="map-count" id="pos-count-areas">&ndash;</span>
+                </label>
               </div>
               <div class="map-meta">
                 <span class="map-total" id="pos-count-total">Loading points&hellip;</span>
+                <a class="btn btn-secondary" id="pos-download-btn" href="/api/place-of-supply/mapping.csv" download>Download mapping</a>
                 <button type="button" class="btn btn-secondary" id="pos-fullscreen-btn" aria-pressed="false">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M8 3H5a2 2 0 0 0-2 2v3" />
@@ -444,8 +451,10 @@
             </div>
 
             <p class="map-hint">
-              Overlapping points are grouped into a ring showing their warehouse / locality mix &mdash; zoom in to split them.
-              Points sharing the exact same coordinate fan out when you click the group.
+              Each tinted area is one <strong>place-of-supply</strong>: the warehouses at its anchor plus the darkstores they are
+              inferred to cater. Click an area to see its stats and the supply links to every member darkstore; click any point
+              for its details including its place-of-supply. Overlapping points group into rings &mdash; zoom in to split them,
+              and coincident points fan out on click.
             </p>
           </section>
         </main>
@@ -464,6 +473,6 @@
       integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg="
       crossorigin=""
     ></script>
-    <script src="/static/app.js?v=1.5.0"></script>
+    <script src="/static/app.js?v=1.6.0"></script>
   </body>
 </html>

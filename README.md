@@ -207,6 +207,33 @@ To keep the no-overlap guarantee, cluster icon diameters (32&ndash;44px) are
 held well below `maxClusterRadius` (70px) in `static/app.js`; raising the icon
 sizes or lowering that radius will let neighbouring rings collide.
 
+### Place-of-supply definition
+
+Which warehouse caters which darkstore is not recorded anywhere, so the tab
+infers a **place-of-supply** for every point (`app/place_of_supply.py`):
+
+- Every warehouse in a city shares one placeholder coordinate in
+  `warehouse.csv` (101 unique coordinates for 101 cities), so a *supply site*
+  &mdash; one unique warehouse coordinate &mdash; is the finest granularity the
+  data supports. Each site is one place-of-supply, named after its city
+  (`mohali / sas nagar` share a coordinate and merge into one).
+- Each darkstore is assigned to the site of its own
+  `dc_blinkit_internal_city` when that city has a warehouse &mdash; that label
+  is Blinkit's own operational grouping, and for 91% of such stores it is
+  also the nearest site &mdash; **unless** a different site is more than 25 km
+  closer (`LABEL_OVERRIDE_KM`), which indicates a mislabel. Darkstores in the
+  255 cities with no warehouse attach to the nearest site by haversine
+  distance.
+- The map draws each place as a tinted convex hull around its members.
+  Clicking a hull shows warehouse/darkstore counts and distance stats, and
+  fans out the supply links to every member darkstore (dashed beyond 50 km).
+  Point popups carry the assignment and its distance.
+
+`GET /api/place-of-supply/mapping.csv` downloads the full assignment: one row
+per warehouse and darkstore with `place_of_supply`, `assignment_basis`
+(`site`, `label`, `label+nearest`, `nearest`, `label-overridden`) and
+`distance_km`.
+
 ## Data source
 
 Results are fetched live from public third-party APIs. Availability and accuracy depend on those services.

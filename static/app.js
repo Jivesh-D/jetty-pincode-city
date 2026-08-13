@@ -27,6 +27,8 @@ const posErrorBanner = document.getElementById("pos-error-banner");
 const posMapLoading = document.getElementById("pos-map-loading");
 const posFullscreenBtn = document.getElementById("pos-fullscreen-btn");
 const posFullscreenLabel = document.getElementById("pos-fullscreen-label");
+const posToggleAreas = document.getElementById("pos-toggle-areas");
+const posCountAreas = document.getElementById("pos-count-areas");
 const cityInputEl = document.getElementById("city-input");
 const cityParseCountEl = document.getElementById("city-parse-count");
 const cityLookupBtn = document.getElementById("city-lookup-btn");
@@ -863,6 +865,17 @@ let posClusterGroup = null;
 let posMarkers = { warehouse: [], locality: [] };
 let posDataBounds = null;
 let posLoadStarted = false;
+let posPlaces = [];
+let posHullLayer = null;
+let posLinkLayer = null;
+let posLocalitiesByPlace = {};
+
+// Hull tints for the place-of-supply areas; cycled by index. Kept away from
+// the amber/green used for the point markers themselves.
+const POS_AREA_PALETTE = [
+  "#2563eb", "#db2777", "#7c3aed", "#0891b2", "#dc2626",
+  "#4f46e5", "#c026d3", "#0d9488", "#9333ea", "#b45309",
+];
 
 function showPosError(message) {
   posErrorBanner.textContent = message;
@@ -911,6 +924,7 @@ function buildPosMarkers(data) {
       posPopupHtml("warehouse", [
         ["dc_blinkit_warehouse_id", row.id, true],
         ["warehouse", row.name, false],
+        ["place_of_supply", row.pos, true],
       ])
     );
     return marker;
@@ -927,6 +941,8 @@ function buildPosMarkers(data) {
         ["store_id", row.store_id, true],
         ["store_name", row.store_name, false],
         ["dc_blinkit_internal_city", row.city, false],
+        ["place_of_supply", row.pos, true],
+        ["distance_to_supply", `${row.dist_km} km`, true],
       ])
     );
     return marker;
@@ -978,6 +994,99 @@ function posClusterIcon(cluster) {
   });
 }
 
+function posClearLinks() {
+  if (posLinkLayer) posLinkLayer.clearLayers();
+}
+
+function posDrawLinks(place, color) {
+  posClearLinks();
+  const members = posLocalitiesByPlace[place.id] || [];
+  for (const member of members) {
+    L.polyline(
+      [
+        [place.lat, place.lon],
+        [member.lat, member.lon],
+      ],
+      {
+        color,
+        weight: 1.2,
+        opacity: 0.5,
+        interactive: false,
+        // Long hauls (label-based or no-warehouse cities) drawn dashed so
+        // they read as inferred rather than local.
+        dashArray: member.dist_km > 50 ? "5 6" : null,
+      }
+    ).addTo(posLinkLayer);
+  }
+}
+
+function posPlacePopupHtml(place, color) {
+  const rows = [
+    ["place_of_supply", place.id, true],
+    ["cities", place.name, false],
+    ["warehouses", String(place.warehouse_count), true],
+    ["darkstores", String(place.locality_count), true],
+    ["median_distance", `${place.median_km} km`, true],
+    ["max_distance", `${place.max_km} km`, true],
+  ];
+  if (place.remote_count > 0) {
+    rows.push(["remote_darkstores", `${place.remote_count} beyond 50 km`, true]);
+  }
+  const body = rows
+    .map(
+      ([label, value, mono]) =>
+        `<dt>${escapeHtml(label)}</dt><dd${mono ? ' class="mono"' : ""}>${escapeHtml(value)}</dd>`
+    )
+    .join("");
+  return `<div class="pos-popup"><span class="pos-popup-kind place" style="background:${color}1f;color:${color}">Place of supply</span><dl>${body}</dl></div>`;
+}
+
+function buildPosPlaces(data) {
+  posPlaces = data.places;
+  posLocalitiesByPlace = {};
+  for (const locality of data.localities) {
+    (posLocalitiesByPlace[locality.pos] ||= []).push(locality);
+  }
+
+  posHullLayer = L.layerGroup();
+  posPlaces.forEach((place, index) => {
+    const color = POS_AREA_PALETTE[index % POS_AREA_PALETTE.length];
+    const style = {
+      color,
+      weight: 1.5,
+      opacity: 0.65,
+      fillColor: color,
+      fillOpacity: 0.07,
+    };
+    const shape =
+      place.hull && place.hull.length >= 3
+        ? L.polygon(place.hull, style)
+        : L.circle([place.lat, place.lon], { ...style, radius: 900, fillOpacity: 0.15 });
+
+    shape.bindTooltip(
+      `${place.id} · ${place.warehouse_count} WH · ${place.locality_count} darkstores`,
+      { sticky: true }
+    );
+    shape.bindPopup(posPlacePopupHtml(place, color));
+    shape.on("popupopen", () => posDrawLinks(place, color));
+    shape.on("popupclose", posClearLinks);
+    shape.addTo(posHullLayer);
+  });
+
+  posCountAreas.textContent = posPlaces.length.toLocaleString();
+  if (posToggleAreas.checked) posMap.addLayer(posHullLayer);
+}
+
+function refreshPosAreas() {
+  if (!posHullLayer) return;
+  if (posToggleAreas.checked) {
+    posMap.addLayer(posHullLayer);
+  } else {
+    posClearLinks();
+    posMap.removeLayer(posHullLayer);
+  }
+}
+
 function refreshPosLayers() {
   if (!posClusterGroup) return;
 
@@ -993,9 +1102,10 @@ function refreshPosLayers() {
 
   posCountWarehouses.textContent = posMarkers.warehouse.length.toLocaleString();
   posCountLocalities.textContent = posMarkers.locality.length.toLocaleString();
+  const placeSuffix = posPlaces.length ? ` · ${posPlaces.length} places` : "";
   posCountTotal.textContent = `${active.length.toLocaleString()} of ${(
     posMarkers.warehouse.length + posMarkers.locality.length
-  ).toLocaleString()} points plotted`;
+  ).toLocaleString()} points plotted${placeSuffix}`;
 }
 
 // Safari still only exposes the webkit-prefixed fullscreen API.
@@ -1072,8 +1182,11 @@ function initPosMap() {
 
   posMap.addLayer(posClusterGroup);
 
+  posLinkLayer = L.layerGroup().addTo(posMap);
+
   posToggleWarehouses.addEventListener("change", refreshPosLayers);
   posToggleLocalities.addEventListener("change", refreshPosLayers);
+  posToggleAreas.addEventListener("change", refreshPosAreas);
   posResetBtn.addEventListener("click", resetPosView);
   posFullscreenBtn.addEventListener("click", togglePosFullscreen);
 
@@ -1105,6 +1218,7 @@ async function loadPosData() {
       posDataBounds = L.latLngBounds(all.map((m) => m.getLatLng()));
     }
 
+    buildPosPlaces(data);
     refreshPosLayers();
     resetPosView();
     posMapLoading.classList.add("hidden");

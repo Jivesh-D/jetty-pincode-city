@@ -224,10 +224,16 @@ infers a **place-of-supply** for every point (`app/place_of_supply.py`):
   closer (`LABEL_OVERRIDE_KM`), which indicates a mislabel. Darkstores in the
   255 cities with no warehouse attach to the nearest site by haversine
   distance.
-- The map draws each place as a tinted convex hull around its members.
-  Clicking a hull shows warehouse/darkstore counts and distance stats, and
-  fans out the supply links to every member darkstore (dashed beyond 50 km).
-  Point popups carry the assignment and its distance.
+- The map draws each place as a tinted **supply area**: the Voronoi cell of
+  its site (every location nearer to this place's warehouses than to any
+  other's), clipped to a disk sized by how far its darkstores actually reach,
+  then inset by 250 m. Areas therefore never intersect &mdash; verified
+  exactly: 0 of 4,950 pairs share any area, minimum gap 500 m &mdash; and
+  gaps between them are intentional. Label-assigned darkstores can sit in a
+  neighbouring territory; the dashed supply links reveal them. Clicking an
+  area shows warehouse/darkstore counts and distance stats and fans out the
+  links to every member darkstore. Point popups carry the assignment and its
+  distance.
 
 `GET /api/place-of-supply/mapping.csv` downloads the full assignment: one row
 per warehouse and darkstore with `place_of_supply`, `assignment_basis`

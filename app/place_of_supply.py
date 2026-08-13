@@ -118,31 +118,162 @@ def _load_localities() -> list[dict[str, object]]:
     return points
 
 
-def _convex_hull(points: list[tuple[float, float]]) -> list[list[float]] | None:
-    """Monotone-chain convex hull; None for degenerate (<3 distinct / collinear)."""
-    pts = sorted(set(points))
-    if len(pts) < 3:
-        return None
+# --- Supply-area geometry ----------------------------------------------------
+#
+# Supply areas must partition the map: two areas may share a border but their
+# interiors never intersect. Each place's area is therefore its Voronoi cell
+# (every location nearer to this site than to any other site), clipped to a
+# disk sized by how far the place's darkstores actually reach. Voronoi cells
+# are pairwise disjoint by construction, and clipping only shrinks them.
+#
+# Geometry is done in a single equirectangular km-plane so every bisector is
+# computed consistently; cells clipped to <=~200 km keep the projection error
+# far below visual scale.
 
-    def cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+_KM_PER_DEG_LAT = 110.574
+_KM_PER_DEG_LON = 111.320
 
-    lower: list[tuple[float, float]] = []
-    for p in pts:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
+_DISK_VERTICES = 48
+_MIN_AREA_RADIUS_KM = 12.0
 
-    upper: list[tuple[float, float]] = []
-    for p in reversed(pts):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
+# Each cell is shrunk inward by this much, so adjacent areas end up separated
+# by a real gap (2x this) instead of sharing a border. This is what makes the
+# pairwise intersection exactly null rather than a shared line, and it
+# absorbs the ~0.1 m vertex rounding introduced by the 6-decimal output.
+_AREA_INSET_KM = 0.25
 
-    hull = lower[:-1] + upper[:-1]
-    if len(hull) < 3:
-        return None
-    return [[round(lat, 6), round(lon, 6)] for lat, lon in hull]
+
+def _project(lat: float, lon: float, cos_ref: float) -> tuple[float, float]:
+    return (lon * _KM_PER_DEG_LON * cos_ref, lat * _KM_PER_DEG_LAT)
+
+
+def _unproject(x: float, y: float, cos_ref: float) -> tuple[float, float]:
+    return (y / _KM_PER_DEG_LAT, x / (_KM_PER_DEG_LON * cos_ref))
+
+
+def _clip_halfplane(
+    polygon: list[tuple[float, float]],
+    point: tuple[float, float],
+    normal: tuple[float, float],
+) -> list[tuple[float, float]]:
+    """Sutherland-Hodgman clip keeping the side where (p - point) . normal >= 0."""
+
+    def signed(p: tuple[float, float]) -> float:
+        return (p[0] - point[0]) * normal[0] + (p[1] - point[1]) * normal[1]
+
+    output: list[tuple[float, float]] = []
+    count = len(polygon)
+    for i in range(count):
+        current, following = polygon[i], polygon[(i + 1) % count]
+        d_current, d_following = signed(current), signed(following)
+        if d_current >= 0:
+            output.append(current)
+            if d_following < 0:
+                t = d_current / (d_current - d_following)
+                output.append(
+                    (
+                        current[0] + t * (following[0] - current[0]),
+                        current[1] + t * (following[1] - current[1]),
+                    )
+                )
+        elif d_following >= 0:
+            t = d_current / (d_current - d_following)
+            output.append(
+                (
+                    current[0] + t * (following[0] - current[0]),
+                    current[1] + t * (following[1] - current[1]),
+                )
+            )
+    return output
+
+
+def _inset_convex(
+    polygon: list[tuple[float, float]], inset: float
+) -> list[tuple[float, float]] | None:
+    """Shrink a convex polygon inward by `inset`; None if it would vanish."""
+    from math import hypot
+
+    # Ensure counter-clockwise so the interior is to the left of each edge.
+    signed_area = sum(
+        polygon[i][0] * polygon[(i + 1) % len(polygon)][1]
+        - polygon[(i + 1) % len(polygon)][0] * polygon[i][1]
+        for i in range(len(polygon))
+    )
+    ring = polygon if signed_area > 0 else polygon[::-1]
+
+    result = ring
+    count = len(ring)
+    for i in range(count):
+        if len(result) < 3:
+            return None
+        (x1, y1), (x2, y2) = ring[i], ring[(i + 1) % count]
+        length = hypot(x2 - x1, y2 - y1)
+        if length == 0:
+            continue
+        # Inward (left) normal, moved in by `inset`.
+        normal = (-(y2 - y1) / length, (x2 - x1) / length)
+        anchor = (x1 + normal[0] * inset, y1 + normal[1] * inset)
+        result = _clip_halfplane(result, anchor, normal)
+
+    return result if len(result) >= 3 else None
+
+
+def _voronoi_areas(
+    site_points: list[tuple[float, float]], radii_km: list[float]
+) -> list[list[list[float]] | None]:
+    """One clipped Voronoi cell per site, as [[lat, lon], ...] rings."""
+    from math import cos as _cos, pi, radians as _radians, sin as _sin
+
+    if not site_points:
+        return []
+
+    lat_ref = sum(lat for lat, _ in site_points) / len(site_points)
+    cos_ref = _cos(_radians(lat_ref))
+    projected = [_project(lat, lon, cos_ref) for lat, lon in site_points]
+
+    # Starting square generously containing every possible disk.
+    xs = [x for x, _ in projected]
+    ys = [y for _, y in projected]
+    pad = max(radii_km) + 100.0
+    box = [
+        (min(xs) - pad, min(ys) - pad),
+        (max(xs) + pad, min(ys) - pad),
+        (max(xs) + pad, max(ys) + pad),
+        (min(xs) - pad, max(ys) + pad),
+    ]
+
+    areas: list[list[list[float]] | None] = []
+    for index, site in enumerate(projected):
+        cell = box
+        for other_index, other in enumerate(projected):
+            if other_index == index or not cell:
+                continue
+            midpoint = ((site[0] + other[0]) / 2, (site[1] + other[1]) / 2)
+            normal = (site[0] - other[0], site[1] - other[1])
+            cell = _clip_halfplane(cell, midpoint, normal)
+
+        # Clip to the reach disk (approximated by a convex polygon).
+        radius = radii_km[index]
+        for step in range(_DISK_VERTICES):
+            angle = 2 * pi * step / _DISK_VERTICES
+            edge_point = (site[0] + radius * _cos(angle), site[1] + radius * _sin(angle))
+            inward = (-_cos(angle), -_sin(angle))
+            if not cell:
+                break
+            cell = _clip_halfplane(cell, edge_point, inward)
+
+        cell = _inset_convex(cell, _AREA_INSET_KM) or cell
+
+        if len(cell) < 3:
+            areas.append(None)
+            continue
+        areas.append(
+            [
+                [round(lat, 6), round(lon, 6)]
+                for lat, lon in (_unproject(x, y, cos_ref) for x, y in cell)
+            ]
+        )
+    return areas
 
 
 def _slug(text: str) -> str:
@@ -204,10 +335,6 @@ def _compute_places(
         ]
         distances_km = [km for _, km in member_localities]
 
-        hull_points = [(site["lat"], site["lon"])] + [
-            (localities[i]["lat"], localities[i]["lon"]) for i, _ in member_localities
-        ]
-
         place = {
             "id": _slug(cities[0]),
             "name": name,
@@ -218,7 +345,6 @@ def _compute_places(
             "median_km": round(statistics.median(distances_km), 1) if distances_km else 0.0,
             "max_km": round(max(distances_km), 1) if distances_km else 0.0,
             "remote_count": sum(1 for km in distances_km if km > REMOTE_KM),
-            "hull": _convex_hull(hull_points),
         }
         places.append(place)
 
@@ -229,6 +355,13 @@ def _compute_places(
             localities[loc_index]["dist_km"] = round(km, 2)
     for locality, (_, _, basis) in zip(localities, assignments):
         locality["basis"] = basis
+
+    # Disjoint supply areas: Voronoi cell per site, clipped to each place's
+    # reach (how far its farthest darkstore is, lightly padded).
+    site_points = [(p["lat"], p["lon"]) for p in places]
+    radii = [max(_MIN_AREA_RADIUS_KM, p["max_km"] * 1.05 + 2.0) for p in places]
+    for place, area in zip(places, _voronoi_areas(site_points, radii)):
+        place["area"] = area
 
     places.sort(key=lambda p: (-p["locality_count"], p["id"]))
     return places

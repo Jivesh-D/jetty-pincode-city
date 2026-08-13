@@ -1059,8 +1059,8 @@ function buildPosPlaces(data) {
       fillOpacity: 0.07,
     };
     const shape =
-      place.hull && place.hull.length >= 3
-        ? L.polygon(place.hull, style)
+      place.area && place.area.length >= 3
+        ? L.polygon(place.area, style)
         : L.circle([place.lat, place.lon], { ...style, radius: 900, fillOpacity: 0.15 });
 
     shape.bindTooltip(

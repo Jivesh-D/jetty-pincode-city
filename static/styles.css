@@ -115,6 +115,7 @@ body {
 
 .tab-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 1.5rem;
   padding: 0.35rem;
@@ -125,7 +126,8 @@ body {
 }
 
 .tab-btn {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -607,4 +609,293 @@ body {
   .btn.loading::after {
     animation: none;
   }
+}
+/* ---------------------------------------------------------------------------
+   PlaceOfSupply Blinkit map
+   --------------------------------------------------------------------------- */
+
+.map-main {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 900px) {
+  .map-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.map-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+
+.map-layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.map-layer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.map-layer:hover {
+  background: var(--surface-hover);
+}
+
+.map-layer input {
+  accent-color: var(--primary);
+  cursor: pointer;
+  margin: 0;
+}
+
+.map-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(23, 20, 60, 0.14);
+}
+
+.map-swatch.warehouse {
+  background: #d97706;
+}
+
+.map-swatch.locality {
+  background: #0e8f68;
+}
+
+.map-count {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.map-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.map-total {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.map-shell {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+#pos-map {
+  height: clamp(460px, 68vh, 780px);
+  width: 100%;
+  background: var(--surface-2);
+}
+
+.map-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.9rem;
+  z-index: 500;
+}
+
+.map-loading.hidden {
+  display: none;
+}
+
+.map-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted-2);
+  line-height: 1.5;
+}
+
+/* Individual markers ------------------------------------------------------ */
+
+.pos-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(23, 20, 60, 0.4);
+}
+
+.pos-dot.warehouse {
+  background: #d97706;
+}
+
+.pos-dot.locality {
+  background: #0e8f68;
+}
+
+/* Two-tone cluster ring --------------------------------------------------- */
+
+.pos-cluster {
+  background: transparent;
+}
+
+.pos-cluster-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(23, 20, 60, 0.28);
+}
+
+.pos-cluster-inner {
+  background: #fff;
+  border-radius: 50%;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pos-cluster.lg .pos-cluster-inner {
+  font-size: 0.78rem;
+}
+
+/* Popups ------------------------------------------------------------------ */
+
+.leaflet-popup-content-wrapper {
+  border-radius: var(--radius);
+  box-shadow: 0 12px 30px rgba(23, 20, 60, 0.18);
+}
+
+.leaflet-popup-content {
+  margin: 0.85rem 1rem;
+  font-family: var(--font);
+}
+
+.pos-popup-kind {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  margin-bottom: 0.55rem;
+}
+
+.pos-popup-kind.warehouse {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.pos-popup-kind.locality {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.pos-popup dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.75rem;
+}
+
+.pos-popup dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pos-popup dd {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.pos-popup dd.mono {
+  font-family: var(--mono);
+}
+
+/* Fullscreen map ---------------------------------------------------------- */
+
+#pos-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+#pos-fullscreen-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.map-panel:fullscreen,
+.map-panel:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border: none;
+  border-radius: 0;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  gap: 0.7rem;
+}
+
+/* The gradient hairline is drawn by .panel::before with a rounded corner —
+   square it off so it does not cut across a full-bleed screen. */
+.map-panel:fullscreen::before,
+.map-panel:-webkit-full-screen::before {
+  border-radius: 0;
+}
+
+.map-panel:fullscreen .map-shell,
+.map-panel:-webkit-full-screen .map-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.map-panel:fullscreen #pos-map,
+.map-panel:-webkit-full-screen #pos-map {
+  height: 100%;
+}
+
+.map-panel:fullscreen .map-hint,
+.map-panel:-webkit-full-screen .map-hint {
+  display: none;
 }

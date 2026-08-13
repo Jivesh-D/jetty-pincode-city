@@ -12,6 +12,7 @@ from app.noon_uae_converter import (
     read_csv_headers,
 )
 from app.pincode_service import lookup_pincodes
+from app.place_of_supply import PlaceOfSupplyDataError, load_points
 from app.sales_converter import convert_sales_xlsx_to_csv
 from app.schemas import (
     CityLookupRequest,
@@ -174,6 +175,22 @@ async def noon_uae_convert(
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="noon-uae-sales.csv"'},
     )
+
+
+@app.get("/api/place-of-supply/points")
+async def place_of_supply_points() -> dict[str, list[dict[str, object]]]:
+    try:
+        points = load_points()
+    except PlaceOfSupplyDataError as exc:
+        logger.error("place-of-supply data unavailable: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    logger.info(
+        "place-of-supply points ok warehouses=%d localities=%d",
+        len(points["warehouses"]),
+        len(points["localities"]),
+    )
+    return points
 
 
 @app.get("/")

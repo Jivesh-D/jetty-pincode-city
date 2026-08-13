@@ -15,6 +15,18 @@ const tabPincode = document.getElementById("tab-pincode");
 const tabSales = document.getElementById("tab-sales");
 const tabNoonUae = document.getElementById("tab-noon-uae");
 const tabCity = document.getElementById("tab-city");
+const tabBtnPlaceOfSupply = document.getElementById("tab-btn-place-of-supply");
+const tabPlaceOfSupply = document.getElementById("tab-place-of-supply");
+const posToggleWarehouses = document.getElementById("pos-toggle-warehouses");
+const posToggleLocalities = document.getElementById("pos-toggle-localities");
+const posCountWarehouses = document.getElementById("pos-count-warehouses");
+const posCountLocalities = document.getElementById("pos-count-localities");
+const posCountTotal = document.getElementById("pos-count-total");
+const posResetBtn = document.getElementById("pos-reset-btn");
+const posErrorBanner = document.getElementById("pos-error-banner");
+const posMapLoading = document.getElementById("pos-map-loading");
+const posFullscreenBtn = document.getElementById("pos-fullscreen-btn");
+const posFullscreenLabel = document.getElementById("pos-fullscreen-label");
 const cityInputEl = document.getElementById("city-input");
 const cityParseCountEl = document.getElementById("city-parse-count");
 const cityLookupBtn = document.getElementById("city-lookup-btn");
@@ -50,7 +62,7 @@ let selectedSalesFile = null;
 let selectedNoonFile = null;
 let detectedNoonColumns = [];
 
-const TABS = ["pincode", "sales", "noon-uae", "city"];
+const TABS = ["pincode", "sales", "noon-uae", "city", "place-of-supply"];
 
 const TAB_SUBTITLES = {
   pincode:
@@ -61,6 +73,8 @@ const TAB_SUBTITLES = {
     "Upload a sales CSV, map columns, spread totals across a date range, and download normalized output.",
   city:
     "Paste latitude,longitude pairs, look up city, locality, postcode and state, then copy results back into a sheet.",
+  "place-of-supply":
+    "Blinkit feeder warehouses and darkstore localities plotted across India. Zoom to split groups, click any point for its details.",
 };
 
 const NOON_COLUMN_SELECTS = [
@@ -344,12 +358,14 @@ function switchTab(tabName) {
     sales: tabBtnSales,
     "noon-uae": tabBtnNoonUae,
     city: tabBtnCity,
+    "place-of-supply": tabBtnPlaceOfSupply,
   };
   const tabPanels = {
     pincode: tabPincode,
     sales: tabSales,
     "noon-uae": tabNoonUae,
     city: tabCity,
+    "place-of-supply": tabPlaceOfSupply,
   };
 
   for (const name of TABS) {
@@ -359,6 +375,10 @@ function switchTab(tabName) {
   }
 
   subtitleEl.textContent = TAB_SUBTITLES[tabName];
+
+  if (tabName === "place-of-supply") {
+    activatePlaceOfSupplyMap();
+  }
 }
 
 function formatFileSize(bytes) {
@@ -746,6 +766,7 @@ tabBtnPincode.addEventListener("click", () => switchTab("pincode"));
 tabBtnSales.addEventListener("click", () => switchTab("sales"));
 tabBtnNoonUae.addEventListener("click", () => switchTab("noon-uae"));
 tabBtnCity.addEventListener("click", () => switchTab("city"));
+tabBtnPlaceOfSupply.addEventListener("click", () => switchTab("place-of-supply"));
 
 salesFileInput.addEventListener("change", () => {
   hideSalesError();
@@ -826,3 +847,291 @@ cityCopyBtn.addEventListener("click", async () => {
 
 updateParseCount();
 updateCityParseCount();
+
+/* ---------------------------------------------------------------------------
+   PlaceOfSupply Blinkit map
+   --------------------------------------------------------------------------- */
+
+const POS_COLORS = { warehouse: "#d97706", locality: "#0e8f68" };
+const POS_INDIA_BOUNDS = [
+  [6.5, 68.0],
+  [35.7, 97.5],
+];
+
+let posMap = null;
+let posClusterGroup = null;
+let posMarkers = { warehouse: [], locality: [] };
+let posDataBounds = null;
+let posLoadStarted = false;
+
+function showPosError(message) {
+  posErrorBanner.textContent = message;
+  posErrorBanner.classList.remove("hidden");
+}
+
+function hidePosError() {
+  posErrorBanner.classList.add("hidden");
+  posErrorBanner.textContent = "";
+}
+
+function posDotIcon(kind) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="pos-dot ${kind}"></div>`,
+    iconSize: [13, 13],
+    iconAnchor: [6.5, 6.5],
+    popupAnchor: [0, -7],
+  });
+}
+
+function posPopupHtml(kind, rows) {
+  const body = rows
+    .map(
+      ([label, value, mono]) =>
+        `<dt>${escapeHtml(label)}</dt><dd${mono ? ' class="mono"' : ""}>${escapeHtml(
+          value || "—"
+        )}</dd>`
+    )
+    .join("");
+  const kindLabel = kind === "warehouse" ? "Warehouse" : "Locality";
+  return `<div class="pos-popup"><span class="pos-popup-kind ${kind}">${kindLabel}</span><dl>${body}</dl></div>`;
+}
+
+function buildPosMarkers(data) {
+  const warehouseIcon = posDotIcon("warehouse");
+  const localityIcon = posDotIcon("locality");
+
+  const warehouses = data.warehouses.map((row) => {
+    const marker = L.marker([row.lat, row.lon], {
+      icon: warehouseIcon,
+      kind: "warehouse",
+      title: row.name,
+    });
+    marker.bindPopup(
+      posPopupHtml("warehouse", [
+        ["dc_blinkit_warehouse_id", row.id, true],
+        ["warehouse", row.name, false],
+      ])
+    );
+    return marker;
+  });
+
+  const localities = data.localities.map((row) => {
+    const marker = L.marker([row.lat, row.lon], {
+      icon: localityIcon,
+      kind: "locality",
+      title: row.store_name,
+    });
+    marker.bindPopup(
+      posPopupHtml("locality", [
+        ["store_id", row.store_id, true],
+        ["store_name", row.store_name, false],
+        ["dc_blinkit_internal_city", row.city, false],
+      ])
+    );
+    return marker;
+  });
+
+  return { warehouse: warehouses, locality: localities };
+}
+
+// Cluster icon: a ring split by warehouse / locality composition, count inside.
+function posClusterIcon(cluster) {
+  const children = cluster.getAllChildMarkers();
+  let warehouseCount = 0;
+  for (const child of children) {
+    if (child.options.kind === "warehouse") warehouseCount += 1;
+  }
+
+  const total = children.length;
+  const localityCount = total - warehouseCount;
+  const warehouseDeg = (warehouseCount / total) * 360;
+
+  let ring;
+  if (warehouseCount === 0) {
+    ring = POS_COLORS.locality;
+  } else if (localityCount === 0) {
+    ring = POS_COLORS.warehouse;
+  } else {
+    ring = `conic-gradient(${POS_COLORS.warehouse} 0deg ${warehouseDeg}deg, ${POS_COLORS.locality} ${warehouseDeg}deg 360deg)`;
+  }
+
+  // Icon diameter is kept well under maxClusterRadius so two neighbouring
+  // cluster rings can never overlap each other at any zoom level.
+  let size = 32;
+  let sizeClass = "";
+  if (total >= 1000) {
+    size = 44;
+    sizeClass = " lg";
+  } else if (total >= 100) {
+    size = 40;
+    sizeClass = " lg";
+  } else if (total >= 10) {
+    size = 36;
+  }
+
+  return L.divIcon({
+    className: `pos-cluster${sizeClass}`,
+    html: `<div class="pos-cluster-ring" style="background:${ring}"><div class="pos-cluster-inner">${total}</div></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function refreshPosLayers() {
+  if (!posClusterGroup) return;
+
+  const showWarehouses = posToggleWarehouses.checked;
+  const showLocalities = posToggleLocalities.checked;
+
+  const active = [];
+  if (showWarehouses) active.push(...posMarkers.warehouse);
+  if (showLocalities) active.push(...posMarkers.locality);
+
+  posClusterGroup.clearLayers();
+  posClusterGroup.addLayers(active);
+
+  posCountWarehouses.textContent = posMarkers.warehouse.length.toLocaleString();
+  posCountLocalities.textContent = posMarkers.locality.length.toLocaleString();
+  posCountTotal.textContent = `${active.length.toLocaleString()} of ${(
+    posMarkers.warehouse.length + posMarkers.locality.length
+  ).toLocaleString()} points plotted`;
+}
+
+// Safari still only exposes the webkit-prefixed fullscreen API.
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function isPosFullscreen() {
+  const el = fullscreenElement();
+  return !!el && el === document.querySelector(".map-panel");
+}
+
+function syncPosFullscreenBtn() {
+  const active = isPosFullscreen();
+  posFullscreenLabel.textContent = active ? "Exit fullscreen" : "Fullscreen";
+  posFullscreenBtn.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
+function togglePosFullscreen() {
+  if (isPosFullscreen()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document);
+    return;
+  }
+
+  const panel = document.querySelector(".map-panel");
+  const request = panel.requestFullscreen || panel.webkitRequestFullscreen;
+  if (!request) {
+    showPosError("Fullscreen is not supported in this browser.");
+    return;
+  }
+
+  Promise.resolve(request.call(panel)).catch(() => {
+    showPosError("Could not enter fullscreen.");
+  });
+}
+
+function resetPosView() {
+  if (!posMap) return;
+  posMap.fitBounds(posDataBounds || POS_INDIA_BOUNDS, { padding: [24, 24] });
+}
+
+function initPosMap() {
+  posMap = L.map("pos-map", {
+    maxZoom: 19,
+    minZoom: 3,
+    // Fractional zoom steps let fitBounds sit snugly around India instead of
+    // rounding down a whole level and leaving most of the frame empty.
+    zoomSnap: 0.25,
+    zoomDelta: 0.5,
+    worldCopyJump: false,
+  }).fitBounds(POS_INDIA_BOUNDS);
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: "abcd",
+    maxZoom: 19,
+  }).addTo(posMap);
+
+  // One mixed group so a warehouse and a locality can never be drawn on top of
+  // each other: overlapping points merge into a single ring, and points that
+  // share an exact coordinate spiderfy apart instead of stacking.
+  posClusterGroup = L.markerClusterGroup({
+    chunkedLoading: true,
+    maxClusterRadius: 70,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+    spiderfyOnMaxZoom: true,
+    spiderfyDistanceMultiplier: 1.6,
+    iconCreateFunction: posClusterIcon,
+    spiderLegPolylineOptions: { weight: 1.5, color: "#6f6d87", opacity: 0.6 },
+  });
+
+  posMap.addLayer(posClusterGroup);
+
+  posToggleWarehouses.addEventListener("change", refreshPosLayers);
+  posToggleLocalities.addEventListener("change", refreshPosLayers);
+  posResetBtn.addEventListener("click", resetPosView);
+  posFullscreenBtn.addEventListener("click", togglePosFullscreen);
+
+  // The panel changes size on enter and on exit, so Leaflet has to re-measure
+  // both times or the tile grid is left cropped or padded out.
+  for (const evt of ["fullscreenchange", "webkitfullscreenchange"]) {
+    document.addEventListener(evt, () => {
+      syncPosFullscreenBtn();
+      requestAnimationFrame(() => posMap.invalidateSize());
+    });
+  }
+}
+
+async function loadPosData() {
+  hidePosError();
+
+  try {
+    const response = await fetch("/api/place-of-supply/points");
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail.detail || `Request failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    posMarkers = buildPosMarkers(data);
+
+    const all = [...posMarkers.warehouse, ...posMarkers.locality];
+    if (all.length) {
+      posDataBounds = L.latLngBounds(all.map((m) => m.getLatLng()));
+    }
+
+    refreshPosLayers();
+    resetPosView();
+    posMapLoading.classList.add("hidden");
+  } catch (error) {
+    posMapLoading.classList.add("hidden");
+    posCountTotal.textContent = "No points loaded";
+    showPosError(`Could not load map data. ${error.message}`);
+  }
+}
+
+function activatePlaceOfSupplyMap() {
+  if (typeof L === "undefined") {
+    posMapLoading.classList.add("hidden");
+    showPosError("Map library failed to load. Check your network connection and reload.");
+    return;
+  }
+
+  if (!posMap) {
+    initPosMap();
+  }
+
+  // The panel is display:none until now, so Leaflet sized itself against a
+  // zero-height container. Re-measure once the panel is actually visible.
+  requestAnimationFrame(() => posMap.invalidateSize());
+
+  if (!posLoadStarted) {
+    posLoadStarted = true;
+    loadPosData();
+  }
+}

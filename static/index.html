@@ -22,7 +22,7 @@
       integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc="
       crossorigin=""
     />
-    <link rel="stylesheet" href="/static/styles.css?v=2.2.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=2.3.0" />
   </head>
   <body>
     <div class="app">
@@ -544,12 +544,23 @@
               <button id="pose-dd-close" type="button" class="btn btn-secondary">Close</button>
             </div>
 
-            <div class="table-wrap explorer-table-wrap">
+            <h3 class="deepdive-heading">Inventory deep dive</h3>
+            <div class="table-wrap explorer-table-wrap deepdive-wrap">
               <table class="results-table explorer-table">
                 <thead>
-                  <tr id="pose-dd-head-row"></tr>
+                  <tr id="pose-dd-inv-head"></tr>
                 </thead>
-                <tbody id="pose-dd-body"></tbody>
+                <tbody id="pose-dd-inv-body"></tbody>
+              </table>
+            </div>
+
+            <h3 class="deepdive-heading">PO deep dive</h3>
+            <div class="table-wrap explorer-table-wrap deepdive-wrap">
+              <table class="results-table explorer-table">
+                <thead>
+                  <tr id="pose-dd-po-head"></tr>
+                </thead>
+                <tbody id="pose-dd-po-body"></tbody>
               </table>
             </div>
           </section>
@@ -569,6 +580,6 @@
       integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg="
       crossorigin=""
     ></script>
-    <script src="/static/app.js?v=1.10.0"></script>
+    <script src="/static/app.js?v=1.11.1"></script>
   </body>
 </html>

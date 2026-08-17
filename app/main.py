@@ -249,13 +249,18 @@ async def pos_explorer_deepdive(
 ) -> dict[str, list[dict[str, str]]]:
     _check_pos_explorer_password(x_pos_password)
     try:
-        rows = load_deepdive_rows(filter_key)
+        views = load_deepdive_rows(filter_key)
     except PosExplorerDataError as exc:
         logger.error("pos-explorer deepdive unavailable: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    logger.info("pos-explorer deepdive ok filter_key=%s count=%d", filter_key, len(rows))
-    return {"rows": rows}
+    logger.info(
+        "pos-explorer deepdive ok filter_key=%s inventory=%d po=%d",
+        filter_key,
+        len(views["inventory"]),
+        len(views["po"]),
+    )
+    return views
 
 
 @app.get("/")

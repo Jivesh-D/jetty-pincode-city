@@ -7,7 +7,8 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parent.parent
 SUMMARY_CSV = DATA_DIR / "place_of_supply.csv"
-DEEPDIVE_CSV = DATA_DIR / "place_of_supply_deepdive.csv"
+INVENTORY_DEEPDIVE_CSV = DATA_DIR / "place_of_supply_inventory_deepdive.csv"
+PO_DEEPDIVE_CSV = DATA_DIR / "place_of_supply_po_deepdive.csv"
 
 
 class PosExplorerDataError(RuntimeError):
@@ -32,19 +33,32 @@ def load_summary_rows() -> list[dict[str, str]]:
     return rows
 
 
-@lru_cache(maxsize=1)
-def _deepdive_index() -> dict[str, list[dict[str, str]]]:
+def _build_index(path: Path, label: str) -> dict[str, list[dict[str, str]]]:
     index: dict[str, list[dict[str, str]]] = {}
-    rows = _read_rows(DEEPDIVE_CSV)
+    rows = _read_rows(path)
     for row in rows:
         index.setdefault(row.get("filter_key", ""), []).append(row)
     logger.info(
-        "pos-explorer: loaded %d deepdive rows across %d filter keys",
+        "pos-explorer: loaded %d %s deepdive rows across %d filter keys",
         len(rows),
+        label,
         len(index),
     )
     return index
 
 
-def load_deepdive_rows(filter_key: str) -> list[dict[str, str]]:
-    return _deepdive_index().get(filter_key, [])
+@lru_cache(maxsize=1)
+def _inventory_index() -> dict[str, list[dict[str, str]]]:
+    return _build_index(INVENTORY_DEEPDIVE_CSV, "inventory")
+
+
+@lru_cache(maxsize=1)
+def _po_index() -> dict[str, list[dict[str, str]]]:
+    return _build_index(PO_DEEPDIVE_CSV, "po")
+
+
+def load_deepdive_rows(filter_key: str) -> dict[str, list[dict[str, str]]]:
+    return {
+        "inventory": _inventory_index().get(filter_key, []),
+        "po": _po_index().get(filter_key, []),
+    }

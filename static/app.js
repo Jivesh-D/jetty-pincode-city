@@ -1301,8 +1301,10 @@ const poseDdImage = document.getElementById("pose-dd-image");
 const poseDdTitle = document.getElementById("pose-dd-title");
 const poseDdSubtitle = document.getElementById("pose-dd-subtitle");
 const poseDdClose = document.getElementById("pose-dd-close");
-const poseDdHeadRow = document.getElementById("pose-dd-head-row");
-const poseDdBody = document.getElementById("pose-dd-body");
+const poseDdInvHead = document.getElementById("pose-dd-inv-head");
+const poseDdInvBody = document.getElementById("pose-dd-inv-body");
+const poseDdPoHead = document.getElementById("pose-dd-po-head");
+const poseDdPoBody = document.getElementById("pose-dd-po-body");
 
 // filter_key, pos_city and place_of_supply never render; filter_key only
 // drives the deepdive lookup behind the scenes.
@@ -1328,18 +1330,26 @@ const POSE_MAIN_COLUMNS = [
   { key: "total_amount", label: "PO Value", num: 0, prefix: "₹" },
 ];
 
-const POSE_DD_COLUMNS = [
+const POSE_DD_INV_COLUMNS = [
   { key: "wh_name", label: "Warehouse" },
+  { key: "dc_blinkit_warehouse_id", label: "Warehouse ID", mono: true },
   { key: "dc_blinkit_internal_city", label: "City" },
   { key: "item_id", label: "Item ID", mono: true },
+  { key: "variant_id", label: "Variant ID", mono: true },
   { key: "frontend_inv_qty", label: "FE Inv", num: 0 },
   { key: "backend_inv_qty", label: "BE Inv", num: 0 },
   { key: "drr_7_be", label: "DRR BE", num: 1 },
   { key: "drr_7_fe_be", label: "DRR FE+BE", num: 1 },
   { key: "doi_be", label: "DOI BE", num: 1 },
   { key: "doi_fe_be", label: "DOI FE+BE", num: 1 },
+];
+
+const POSE_DD_PO_COLUMNS = [
   { key: "po_number", label: "PO Number", mono: true },
+  { key: "wh_name", label: "Warehouse" },
+  { key: "dc_blinkit_internal_city", label: "City" },
   { key: "po_state", label: "PO State", type: "po-state" },
+  { key: "item_id", label: "Item ID", mono: true },
   { key: "units_ordered", label: "Units Ordered", num: 0 },
   { key: "remaining_quantity", label: "Remaining Qty", num: 0 },
   { key: "total_amount", label: "PO Value", num: 0, prefix: "₹" },
@@ -1539,24 +1549,39 @@ function poseCloseDeepdive() {
   poseRenderBody();
 }
 
-function poseRenderDeepdiveRows(rows) {
-  poseDdHeadRow.innerHTML = POSE_DD_COLUMNS.map(
-    (col) => `<th>${escapeHtml(col.label)}</th>`
-  ).join("");
+function poseRenderDdTable(headEl, bodyEl, columns, rows, emptyMessage) {
+  headEl.innerHTML = columns.map((col) => `<th>${escapeHtml(col.label)}</th>`).join("");
 
   if (!rows.length) {
-    poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">No deep-dive data available for this item &times; city</td></tr>`;
+    bodyEl.innerHTML = `<tr class="empty-row"><td colspan="${columns.length}">${emptyMessage}</td></tr>`;
     return;
   }
 
-  poseDdBody.innerHTML = rows
+  bodyEl.innerHTML = rows
     .map((row) => {
-      const cells = POSE_DD_COLUMNS.map(
+      const cells = columns.map(
         (col) => `<td${poseCellClass(col)}>${poseFormatCell(col, row)}</td>`
       ).join("");
       return `<tr>${cells}</tr>`;
     })
     .join("");
+}
+
+function poseRenderDeepdiveViews(views) {
+  poseRenderDdTable(
+    poseDdInvHead,
+    poseDdInvBody,
+    POSE_DD_INV_COLUMNS,
+    views.inventory || [],
+    "No inventory deep-dive data for this item &times; city"
+  );
+  poseRenderDdTable(
+    poseDdPoHead,
+    poseDdPoBody,
+    POSE_DD_PO_COLUMNS,
+    views.po || [],
+    "No PO deep-dive data for this item &times; city"
+  );
 }
 
 async function poseOpenDeepdive(index) {
@@ -1577,17 +1602,20 @@ async function poseOpenDeepdive(index) {
   }
 
   poseDeepdivePanel.classList.remove("hidden");
-  poseDdHeadRow.innerHTML = POSE_DD_COLUMNS.map(
-    (col) => `<th>${escapeHtml(col.label)}</th>`
-  ).join("");
-  poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">Loading deep-dive data&hellip;</td></tr>`;
+  for (const [headEl, bodyEl, columns] of [
+    [poseDdInvHead, poseDdInvBody, POSE_DD_INV_COLUMNS],
+    [poseDdPoHead, poseDdPoBody, POSE_DD_PO_COLUMNS],
+  ]) {
+    headEl.innerHTML = columns.map((col) => `<th>${escapeHtml(col.label)}</th>`).join("");
+    bodyEl.innerHTML = `<tr class="empty-row"><td colspan="${columns.length}">Loading deep-dive data&hellip;</td></tr>`;
+  }
   poseDeepdivePanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
   const filterKey = row.filter_key || "";
 
   try {
-    let rows = poseDeepdiveCache.get(filterKey);
-    if (!rows) {
+    let views = poseDeepdiveCache.get(filterKey);
+    if (!views) {
       const res = await fetch(
         `/api/pos-explorer/deepdive?filter_key=${encodeURIComponent(filterKey)}`,
         { headers: poseAuthHeaders() }
@@ -1602,19 +1630,40 @@ async function poseOpenDeepdive(index) {
           typeof data.detail === "string" ? data.detail : `Request failed (${res.status})`
         );
       }
-      rows = data.rows || [];
-      poseDeepdiveCache.set(filterKey, rows);
+      views = { inventory: data.inventory || [], po: data.po || [] };
+      poseDeepdiveCache.set(filterKey, views);
     }
 
     // Ignore stale responses if the user has clicked another row meanwhile.
     if (poseSelectedIndex !== index) return;
-    poseRenderDeepdiveRows(rows);
+    poseRenderDeepdiveViews(views);
   } catch (err) {
     if (poseSelectedIndex !== index) return;
-    poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">${escapeHtml(
-      err.message || "Could not load deep-dive data."
-    )}</td></tr>`;
+    const message = escapeHtml(err.message || "Could not load deep-dive data.");
+    poseDdInvBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_INV_COLUMNS.length}">${message}</td></tr>`;
+    poseDdPoBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_PO_COLUMNS.length}">${message}</td></tr>`;
   }
+}
+
+// DOI in the overview is computed, not read from the CSV:
+//   DOI BE     = BE inv / DRR BE
+//   DOI FE+BE  = (FE inv + BE inv) / DRR FE+BE
+// A zero DRR with stock on hand renders as ∞; missing DRR renders as —.
+function poseComputedDoi(inventory, drr) {
+  const drrValue = Number(drr);
+  if (drr === "" || drr == null || Number.isNaN(drrValue)) return "";
+  if (drrValue === 0) return inventory > 0 ? "Infinity" : "0";
+  return String(inventory / drrValue);
+}
+
+function poseWithComputedDoi(row) {
+  const fe = Number(row.frontend_inv_qty) || 0;
+  const be = Number(row.backend_inv_qty) || 0;
+  return {
+    ...row,
+    doi_be: poseComputedDoi(be, row.drr_7_be),
+    doi_fe_be: poseComputedDoi(fe + be, row.drr_7_fe_be),
+  };
 }
 
 function posePopulateCityFilter() {
@@ -1644,7 +1693,7 @@ async function loadPoseData() {
       );
     }
 
-    poseRows = data.rows || [];
+    poseRows = (data.rows || []).map(poseWithComputedDoi);
     poseShowData();
     posePopulateCityFilter();
     poseRender();

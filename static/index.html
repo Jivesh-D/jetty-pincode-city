@@ -22,7 +22,7 @@
       integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc="
       crossorigin=""
     />
-    <link rel="stylesheet" href="/static/styles.css?v=2.0.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=2.2.0" />
   </head>
   <body>
     <div class="app">
@@ -110,6 +110,20 @@
             <line x1="15" y1="6.8" x2="15" y2="19.5" />
           </svg>
           PlaceOfSupply Blinkit
+        </button>
+        <button
+          id="tab-btn-pos-explorer"
+          type="button"
+          class="tab-btn"
+          data-tab="pos-explorer"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <line x1="15.3" y1="15.3" x2="20.5" y2="20.5" />
+            <line x1="7.5" y1="10.5" x2="13.5" y2="10.5" />
+            <line x1="10.5" y1="7.5" x2="10.5" y2="13.5" />
+          </svg>
+          PoS Deep Dive
         </button>
       </nav>
 
@@ -460,6 +474,87 @@
           </section>
         </main>
       </div>
+      <div id="tab-pos-explorer" class="tab-panel hidden">
+        <main class="main explorer-main">
+          <section class="panel explorer-panel pose-lock-panel hidden" id="pose-lock-panel">
+            <h2 class="label">Password required</h2>
+            <p class="help-text">
+              PoS Deep Dive is protected. Enter the password to continue.
+            </p>
+            <div id="pose-lock-error" class="error-banner hidden" role="alert"></div>
+            <div class="pose-lock-form">
+              <input
+                id="pose-password-input"
+                class="field-input"
+                type="password"
+                placeholder="Password"
+                autocomplete="current-password"
+              />
+              <button id="pose-unlock-btn" type="button" class="btn btn-primary">
+                Unlock
+              </button>
+            </div>
+          </section>
+
+          <section class="panel explorer-panel" id="pose-table-panel">
+            <div class="explorer-toolbar">
+              <h2 class="label">City &times; Item overview</h2>
+              <div class="explorer-controls">
+                <input
+                  id="pose-search"
+                  class="field-input explorer-search"
+                  type="search"
+                  placeholder="Search item name / item ID / variant ID&hellip;"
+                />
+                <select id="pose-city-filter" class="field-input explorer-city">
+                  <option value="">All cities</option>
+                </select>
+                <span class="explorer-count" id="pose-count">Loading&hellip;</span>
+              </div>
+            </div>
+
+            <div id="pose-error-banner" class="error-banner hidden" role="alert"></div>
+
+            <div class="table-wrap explorer-table-wrap">
+              <table id="pose-table" class="results-table explorer-table">
+                <thead>
+                  <tr id="pose-head-row"></tr>
+                </thead>
+                <tbody id="pose-body">
+                  <tr class="empty-row">
+                    <td colspan="18">Loading data&hellip;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="map-hint">
+              Click any row to open its warehouse-level deep dive below. Click a column header to sort.
+            </p>
+          </section>
+
+          <section class="panel explorer-panel hidden" id="pose-deepdive-panel">
+            <div class="explorer-toolbar">
+              <div class="deepdive-title">
+                <img id="pose-dd-image" class="deepdive-thumb hidden" alt="" />
+                <div>
+                  <h2 class="label" id="pose-dd-title">Deep dive</h2>
+                  <p class="deepdive-subtitle" id="pose-dd-subtitle"></p>
+                </div>
+              </div>
+              <button id="pose-dd-close" type="button" class="btn btn-secondary">Close</button>
+            </div>
+
+            <div class="table-wrap explorer-table-wrap">
+              <table class="results-table explorer-table">
+                <thead>
+                  <tr id="pose-dd-head-row"></tr>
+                </thead>
+                <tbody id="pose-dd-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
 
     <div id="toast" class="toast hidden" aria-live="polite">Copied!</div>
@@ -474,6 +569,6 @@
       integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg="
       crossorigin=""
     ></script>
-    <script src="/static/app.js?v=1.8.0"></script>
+    <script src="/static/app.js?v=1.10.0"></script>
   </body>
 </html>

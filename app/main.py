@@ -1,7 +1,9 @@
 import logging
+import os
+import secrets
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -13,6 +15,11 @@ from app.noon_uae_converter import (
 )
 from app.pincode_service import lookup_pincodes
 from app.place_of_supply import PlaceOfSupplyDataError, build_mapping_csv, load_points
+from app.pos_explorer import (
+    PosExplorerDataError,
+    load_deepdive_rows,
+    load_summary_rows,
+)
 from app.sales_converter import convert_sales_xlsx_to_csv
 from app.schemas import (
     CityLookupRequest,
@@ -208,6 +215,47 @@ async def place_of_supply_mapping() -> Response:
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="place-of-supply-mapping.csv"'},
     )
+
+
+def _check_pos_explorer_password(supplied: str | None) -> None:
+    """Gate PoS Deep Dive behind the PASSWORD env var; open when it is unset
+    (local development)."""
+    expected = os.environ.get("PASSWORD", "")
+    if not expected:
+        return
+    if not supplied or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+
+@app.get("/api/pos-explorer/rows")
+async def pos_explorer_rows(
+    x_pos_password: str | None = Header(default=None),
+) -> dict[str, list[dict[str, str]]]:
+    _check_pos_explorer_password(x_pos_password)
+    try:
+        rows = load_summary_rows()
+    except PosExplorerDataError as exc:
+        logger.error("pos-explorer data unavailable: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    logger.info("pos-explorer rows ok count=%d", len(rows))
+    return {"rows": rows}
+
+
+@app.get("/api/pos-explorer/deepdive")
+async def pos_explorer_deepdive(
+    filter_key: str,
+    x_pos_password: str | None = Header(default=None),
+) -> dict[str, list[dict[str, str]]]:
+    _check_pos_explorer_password(x_pos_password)
+    try:
+        rows = load_deepdive_rows(filter_key)
+    except PosExplorerDataError as exc:
+        logger.error("pos-explorer deepdive unavailable: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    logger.info("pos-explorer deepdive ok filter_key=%s count=%d", filter_key, len(rows))
+    return {"rows": rows}
 
 
 @app.get("/")

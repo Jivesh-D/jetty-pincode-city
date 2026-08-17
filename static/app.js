@@ -17,6 +17,8 @@ const tabNoonUae = document.getElementById("tab-noon-uae");
 const tabCity = document.getElementById("tab-city");
 const tabBtnPlaceOfSupply = document.getElementById("tab-btn-place-of-supply");
 const tabPlaceOfSupply = document.getElementById("tab-place-of-supply");
+const tabBtnPosExplorer = document.getElementById("tab-btn-pos-explorer");
+const tabPosExplorer = document.getElementById("tab-pos-explorer");
 const posToggleWarehouses = document.getElementById("pos-toggle-warehouses");
 const posToggleLocalities = document.getElementById("pos-toggle-localities");
 const posCountWarehouses = document.getElementById("pos-count-warehouses");
@@ -64,7 +66,7 @@ let selectedSalesFile = null;
 let selectedNoonFile = null;
 let detectedNoonColumns = [];
 
-const TABS = ["pincode", "sales", "noon-uae", "city", "place-of-supply"];
+const TABS = ["pincode", "sales", "noon-uae", "city", "place-of-supply", "pos-explorer"];
 
 const TAB_SUBTITLES = {
   pincode:
@@ -77,6 +79,8 @@ const TAB_SUBTITLES = {
     "Paste latitude,longitude pairs, look up city, locality, postcode and state, then copy results back into a sheet.",
   "place-of-supply":
     "Blinkit feeder warehouses and darkstore localities plotted across India. Zoom to split groups, click any point for its details.",
+  "pos-explorer":
+    "City-level item availability with sales contribution, OSA, inventory and PO status. Click any row for its warehouse-level deep dive.",
 };
 
 const NOON_COLUMN_SELECTS = [
@@ -361,6 +365,7 @@ function switchTab(tabName) {
     "noon-uae": tabBtnNoonUae,
     city: tabBtnCity,
     "place-of-supply": tabBtnPlaceOfSupply,
+    "pos-explorer": tabBtnPosExplorer,
   };
   const tabPanels = {
     pincode: tabPincode,
@@ -368,6 +373,7 @@ function switchTab(tabName) {
     "noon-uae": tabNoonUae,
     city: tabCity,
     "place-of-supply": tabPlaceOfSupply,
+    "pos-explorer": tabPosExplorer,
   };
 
   for (const name of TABS) {
@@ -380,6 +386,10 @@ function switchTab(tabName) {
 
   if (tabName === "place-of-supply") {
     activatePlaceOfSupplyMap();
+  }
+
+  if (tabName === "pos-explorer") {
+    activatePosExplorer();
   }
 }
 
@@ -769,6 +779,7 @@ tabBtnSales.addEventListener("click", () => switchTab("sales"));
 tabBtnNoonUae.addEventListener("click", () => switchTab("noon-uae"));
 tabBtnCity.addEventListener("click", () => switchTab("city"));
 tabBtnPlaceOfSupply.addEventListener("click", () => switchTab("place-of-supply"));
+tabBtnPosExplorer.addEventListener("click", () => switchTab("pos-explorer"));
 
 salesFileInput.addEventListener("change", () => {
   hideSalesError();
@@ -1269,3 +1280,419 @@ function activatePlaceOfSupplyMap() {
     loadPosData();
   }
 }
+
+/* ---------------------------------------------------------------------------
+   PoS Deep Dive explorer
+   --------------------------------------------------------------------------- */
+
+const poseLockPanel = document.getElementById("pose-lock-panel");
+const poseLockError = document.getElementById("pose-lock-error");
+const posePasswordInput = document.getElementById("pose-password-input");
+const poseUnlockBtn = document.getElementById("pose-unlock-btn");
+const poseTablePanel = document.getElementById("pose-table-panel");
+const poseSearchEl = document.getElementById("pose-search");
+const poseCityFilterEl = document.getElementById("pose-city-filter");
+const poseCountEl = document.getElementById("pose-count");
+const poseErrorBanner = document.getElementById("pose-error-banner");
+const poseHeadRow = document.getElementById("pose-head-row");
+const poseBody = document.getElementById("pose-body");
+const poseDeepdivePanel = document.getElementById("pose-deepdive-panel");
+const poseDdImage = document.getElementById("pose-dd-image");
+const poseDdTitle = document.getElementById("pose-dd-title");
+const poseDdSubtitle = document.getElementById("pose-dd-subtitle");
+const poseDdClose = document.getElementById("pose-dd-close");
+const poseDdHeadRow = document.getElementById("pose-dd-head-row");
+const poseDdBody = document.getElementById("pose-dd-body");
+
+// filter_key, pos_city and place_of_supply never render; filter_key only
+// drives the deepdive lookup behind the scenes.
+const POSE_MAIN_COLUMNS = [
+  { key: "image_url", label: "", type: "image", sortable: false },
+  { key: "item_name", label: "Item", type: "item" },
+  { key: "city", label: "City" },
+  { key: "item_id", label: "Item ID", mono: true },
+  { key: "variant_id", label: "Variant ID", mono: true },
+  { key: "sales_countribution", label: "Sales %", num: 2, suffix: "%" },
+  { key: "osa_d3", label: "OSA D-3", num: 0, suffix: "%" },
+  { key: "osa_d2", label: "OSA D-2", num: 0, suffix: "%" },
+  { key: "osa_d1", label: "OSA D-1", num: 0, suffix: "%" },
+  { key: "frontend_inv_qty", label: "FE Inv", num: 0 },
+  { key: "backend_inv_qty", label: "BE Inv", num: 0 },
+  { key: "drr_7_be", label: "DRR BE", num: 1 },
+  { key: "drr_7_fe_be", label: "DRR FE+BE", num: 1 },
+  { key: "doi_be", label: "DOI BE", num: 1 },
+  { key: "doi_fe_be", label: "DOI FE+BE", num: 1 },
+  { key: "po_count", label: "POs", num: 0 },
+  { key: "units_ordered", label: "Units Ordered", num: 0 },
+  { key: "remaining_quantity", label: "Remaining Qty", num: 0 },
+  { key: "total_amount", label: "PO Value", num: 0, prefix: "₹" },
+];
+
+const POSE_DD_COLUMNS = [
+  { key: "wh_name", label: "Warehouse" },
+  { key: "dc_blinkit_internal_city", label: "City" },
+  { key: "item_id", label: "Item ID", mono: true },
+  { key: "frontend_inv_qty", label: "FE Inv", num: 0 },
+  { key: "backend_inv_qty", label: "BE Inv", num: 0 },
+  { key: "drr_7_be", label: "DRR BE", num: 1 },
+  { key: "drr_7_fe_be", label: "DRR FE+BE", num: 1 },
+  { key: "doi_be", label: "DOI BE", num: 1 },
+  { key: "doi_fe_be", label: "DOI FE+BE", num: 1 },
+  { key: "po_number", label: "PO Number", mono: true },
+  { key: "po_state", label: "PO State", type: "po-state" },
+  { key: "units_ordered", label: "Units Ordered", num: 0 },
+  { key: "remaining_quantity", label: "Remaining Qty", num: 0 },
+  { key: "total_amount", label: "PO Value", num: 0, prefix: "₹" },
+];
+
+let poseRows = [];
+let poseLoadStarted = false;
+let poseSelectedIndex = null;
+let poseSort = { key: "sales_countribution", dir: "desc" };
+const poseDeepdiveCache = new Map();
+let posePassword = sessionStorage.getItem("pose-password") || "";
+
+function poseAuthHeaders() {
+  return posePassword ? { "X-POS-Password": posePassword } : {};
+}
+
+function poseShowLock(message) {
+  posePassword = "";
+  sessionStorage.removeItem("pose-password");
+  poseDeepdiveCache.clear();
+  // Allow a fresh load attempt once the user unlocks.
+  poseLoadStarted = false;
+  poseTablePanel.classList.add("hidden");
+  poseDeepdivePanel.classList.add("hidden");
+  poseLockPanel.classList.remove("hidden");
+  if (message) {
+    poseLockError.textContent = message;
+    poseLockError.classList.remove("hidden");
+  } else {
+    poseLockError.classList.add("hidden");
+    poseLockError.textContent = "";
+  }
+  posePasswordInput.focus();
+}
+
+function poseShowData() {
+  poseLockPanel.classList.add("hidden");
+  poseTablePanel.classList.remove("hidden");
+  posePasswordInput.value = "";
+  poseLockError.classList.add("hidden");
+  poseLockError.textContent = "";
+}
+
+async function poseUnlock() {
+  const value = posePasswordInput.value;
+  if (!value) {
+    poseLockError.textContent = "Enter the password.";
+    poseLockError.classList.remove("hidden");
+    posePasswordInput.focus();
+    return;
+  }
+
+  posePassword = value;
+  sessionStorage.setItem("pose-password", value);
+  poseUnlockBtn.disabled = true;
+  poseUnlockBtn.classList.add("loading");
+  try {
+    poseLoadStarted = true;
+    await loadPoseData();
+  } finally {
+    poseUnlockBtn.disabled = false;
+    poseUnlockBtn.classList.remove("loading");
+  }
+}
+
+function showPoseError(message) {
+  poseErrorBanner.textContent = message;
+  poseErrorBanner.classList.remove("hidden");
+}
+
+function hidePoseError() {
+  poseErrorBanner.classList.add("hidden");
+  poseErrorBanner.textContent = "";
+}
+
+function poseFormatCell(col, row) {
+  const raw = (row[col.key] ?? "").trim();
+
+  if (col.type === "image") {
+    if (!raw) return '<span class="pose-noimg">—</span>';
+    return `<img class="pose-thumb" src="${escapeAttr(raw)}" alt="" loading="lazy" />`;
+  }
+
+  if (col.type === "item") {
+    const units = (row.units ?? "").trim();
+    return `<div class="pose-item-name" title="${escapeAttr(raw)}">${escapeHtml(raw || "—")}</div>${
+      units ? `<div class="pose-item-units">${escapeHtml(units)}</div>` : ""
+    }`;
+  }
+
+  if (col.type === "po-state") {
+    if (!raw) return '<span class="pose-muted">—</span>';
+    const cls = raw.toLowerCase().startsWith("partial") ? "status-invalid" : "status-ok";
+    return `<span class="status-pill ${cls}">${escapeHtml(raw)}</span>`;
+  }
+
+  if (col.num !== undefined) {
+    const value = Number(raw);
+    if (raw === "" || Number.isNaN(value)) return '<span class="pose-muted">—</span>';
+    const formatted = value.toLocaleString("en-IN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: col.num,
+    });
+    return `${col.prefix || ""}${formatted}${col.suffix || ""}`;
+  }
+
+  return raw ? escapeHtml(raw) : '<span class="pose-muted">—</span>';
+}
+
+function poseCellClass(col) {
+  const classes = [];
+  if (col.mono) classes.push("pincode-col");
+  if (col.num !== undefined) classes.push("pose-num");
+  if (col.type === "image") classes.push("pose-img-col");
+  return classes.length ? ` class="${classes.join(" ")}"` : "";
+}
+
+function poseVisibleRows() {
+  const query = poseSearchEl.value.trim().toLowerCase();
+  const city = poseCityFilterEl.value;
+
+  let rows = poseRows.map((row, index) => ({ row, index }));
+
+  if (city) {
+    rows = rows.filter(({ row }) => row.city === city);
+  }
+  if (query) {
+    rows = rows.filter(({ row }) =>
+      [row.item_name, row.item_id, row.variant_id]
+        .some((field) => (field || "").toLowerCase().includes(query))
+    );
+  }
+
+  const col = POSE_MAIN_COLUMNS.find((c) => c.key === poseSort.key);
+  if (col) {
+    const dir = poseSort.dir === "asc" ? 1 : -1;
+    const numeric = col.num !== undefined;
+    rows.sort((a, b) => {
+      const va = a.row[poseSort.key] ?? "";
+      const vb = b.row[poseSort.key] ?? "";
+      if (numeric) {
+        const na = Number(va);
+        const nb = Number(vb);
+        const fa = Number.isNaN(na) ? -Infinity : na;
+        const fb = Number.isNaN(nb) ? -Infinity : nb;
+        return (fa - fb) * dir;
+      }
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
+  return rows;
+}
+
+function poseRenderHead() {
+  poseHeadRow.innerHTML = POSE_MAIN_COLUMNS.map((col) => {
+    const sortable = col.sortable !== false;
+    const isSorted = sortable && poseSort.key === col.key;
+    const arrow = isSorted ? (poseSort.dir === "asc" ? " ▲" : " ▼") : "";
+    return `<th${sortable ? ` class="pose-sortable" data-sort="${escapeAttr(col.key)}"` : ""}>${escapeHtml(col.label)}${arrow}</th>`;
+  }).join("");
+}
+
+function poseRenderBody() {
+  const visible = poseVisibleRows();
+
+  const total = poseRows.length;
+  poseCountEl.textContent =
+    visible.length === total
+      ? `${total.toLocaleString()} rows`
+      : `${visible.length.toLocaleString()} of ${total.toLocaleString()} rows`;
+
+  if (!visible.length) {
+    poseBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_MAIN_COLUMNS.length}">No rows match the current filters</td></tr>`;
+    return;
+  }
+
+  poseBody.innerHTML = visible
+    .map(({ row, index }) => {
+      const selected = index === poseSelectedIndex ? " pose-selected" : "";
+      const cells = POSE_MAIN_COLUMNS.map(
+        (col) => `<td${poseCellClass(col)}>${poseFormatCell(col, row)}</td>`
+      ).join("");
+      return `<tr class="pose-row${selected}" data-index="${index}" tabindex="0">${cells}</tr>`;
+    })
+    .join("");
+}
+
+function poseRender() {
+  poseRenderHead();
+  poseRenderBody();
+}
+
+function poseCloseDeepdive() {
+  poseSelectedIndex = null;
+  poseDeepdivePanel.classList.add("hidden");
+  poseRenderBody();
+}
+
+function poseRenderDeepdiveRows(rows) {
+  poseDdHeadRow.innerHTML = POSE_DD_COLUMNS.map(
+    (col) => `<th>${escapeHtml(col.label)}</th>`
+  ).join("");
+
+  if (!rows.length) {
+    poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">No deep-dive data available for this item &times; city</td></tr>`;
+    return;
+  }
+
+  poseDdBody.innerHTML = rows
+    .map((row) => {
+      const cells = POSE_DD_COLUMNS.map(
+        (col) => `<td${poseCellClass(col)}>${poseFormatCell(col, row)}</td>`
+      ).join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+}
+
+async function poseOpenDeepdive(index) {
+  const row = poseRows[index];
+  if (!row) return;
+
+  poseSelectedIndex = index;
+  poseRenderBody();
+
+  poseDdTitle.textContent = row.item_name || "Deep dive";
+  const units = (row.units || "").trim();
+  poseDdSubtitle.textContent = [row.city, units].filter(Boolean).join(" · ");
+  if ((row.image_url || "").trim()) {
+    poseDdImage.src = row.image_url.trim();
+    poseDdImage.classList.remove("hidden");
+  } else {
+    poseDdImage.classList.add("hidden");
+  }
+
+  poseDeepdivePanel.classList.remove("hidden");
+  poseDdHeadRow.innerHTML = POSE_DD_COLUMNS.map(
+    (col) => `<th>${escapeHtml(col.label)}</th>`
+  ).join("");
+  poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">Loading deep-dive data&hellip;</td></tr>`;
+  poseDeepdivePanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  const filterKey = row.filter_key || "";
+
+  try {
+    let rows = poseDeepdiveCache.get(filterKey);
+    if (!rows) {
+      const res = await fetch(
+        `/api/pos-explorer/deepdive?filter_key=${encodeURIComponent(filterKey)}`,
+        { headers: poseAuthHeaders() }
+      );
+      if (res.status === 401) {
+        poseShowLock("Your session is no longer valid. Enter the password again.");
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.detail === "string" ? data.detail : `Request failed (${res.status})`
+        );
+      }
+      rows = data.rows || [];
+      poseDeepdiveCache.set(filterKey, rows);
+    }
+
+    // Ignore stale responses if the user has clicked another row meanwhile.
+    if (poseSelectedIndex !== index) return;
+    poseRenderDeepdiveRows(rows);
+  } catch (err) {
+    if (poseSelectedIndex !== index) return;
+    poseDdBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_DD_COLUMNS.length}">${escapeHtml(
+      err.message || "Could not load deep-dive data."
+    )}</td></tr>`;
+  }
+}
+
+function posePopulateCityFilter() {
+  const cities = [...new Set(poseRows.map((row) => row.city).filter(Boolean))].sort();
+  poseCityFilterEl.innerHTML =
+    '<option value="">All cities</option>' +
+    cities
+      .map((city) => `<option value="${escapeAttr(city)}">${escapeHtml(city)}</option>`)
+      .join("");
+}
+
+async function loadPoseData() {
+  hidePoseError();
+  poseCountEl.textContent = "Loading…";
+
+  try {
+    const res = await fetch("/api/pos-explorer/rows", { headers: poseAuthHeaders() });
+    if (res.status === 401) {
+      const hadPassword = !!posePassword;
+      poseShowLock(hadPassword ? "Incorrect password." : "");
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : `Request failed (${res.status})`
+      );
+    }
+
+    poseRows = data.rows || [];
+    poseShowData();
+    posePopulateCityFilter();
+    poseRender();
+  } catch (err) {
+    poseCountEl.textContent = "No data";
+    poseBody.innerHTML = `<tr class="empty-row"><td colspan="${POSE_MAIN_COLUMNS.length}">Could not load data</td></tr>`;
+    showPoseError(`Could not load data. ${err.message}`);
+  }
+}
+
+function activatePosExplorer() {
+  if (!poseLoadStarted) {
+    poseLoadStarted = true;
+    loadPoseData();
+  }
+}
+
+poseSearchEl.addEventListener("input", poseRenderBody);
+poseCityFilterEl.addEventListener("change", poseRenderBody);
+poseDdClose.addEventListener("click", poseCloseDeepdive);
+poseUnlockBtn.addEventListener("click", poseUnlock);
+posePasswordInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") poseUnlock();
+});
+
+poseHeadRow.addEventListener("click", (event) => {
+  const th = event.target.closest("th[data-sort]");
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (poseSort.key === key) {
+    poseSort.dir = poseSort.dir === "asc" ? "desc" : "asc";
+  } else {
+    const col = POSE_MAIN_COLUMNS.find((c) => c.key === key);
+    poseSort = { key, dir: col && col.num !== undefined ? "desc" : "asc" };
+  }
+  poseRender();
+});
+
+poseBody.addEventListener("click", (event) => {
+  const tr = event.target.closest("tr.pose-row");
+  if (!tr) return;
+  poseOpenDeepdive(Number(tr.dataset.index));
+});
+
+poseBody.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const tr = event.target.closest("tr.pose-row");
+  if (!tr) return;
+  event.preventDefault();
+  poseOpenDeepdive(Number(tr.dataset.index));
+});

@@ -20,8 +20,10 @@ const tabPlaceOfSupply = document.getElementById("tab-place-of-supply");
 const tabBtnPosExplorer = document.getElementById("tab-btn-pos-explorer");
 const tabPosExplorer = document.getElementById("tab-pos-explorer");
 const posToggleWarehouses = document.getElementById("pos-toggle-warehouses");
+const posToggleDormant = document.getElementById("pos-toggle-dormant");
 const posToggleLocalities = document.getElementById("pos-toggle-localities");
 const posCountWarehouses = document.getElementById("pos-count-warehouses");
+const posCountDormant = document.getElementById("pos-count-dormant");
 const posCountLocalities = document.getElementById("pos-count-localities");
 const posCountTotal = document.getElementById("pos-count-total");
 const posResetBtn = document.getElementById("pos-reset-btn");
@@ -865,7 +867,7 @@ updateCityParseCount();
    PlaceOfSupply Blinkit map
    --------------------------------------------------------------------------- */
 
-const POS_COLORS = { warehouse: "#d97706", locality: "#0e8f68" };
+const POS_COLORS = { warehouse: "#d97706", dormant: "#94a3b8", locality: "#0e8f68" };
 const POS_INDIA_BOUNDS = [
   [6.5, 68.0],
   [35.7, 97.5],
@@ -873,7 +875,7 @@ const POS_INDIA_BOUNDS = [
 
 let posMap = null;
 let posClusterGroup = null;
-let posMarkers = { warehouse: [], locality: [] };
+let posMarkers = { warehouse: [], dormant: [], locality: [] };
 let posDataBounds = null;
 let posLoadStarted = false;
 let posPlaces = [];
@@ -883,9 +885,11 @@ let posLocalitiesByPlace = {};
 
 // Hull tints for the place-of-supply areas; cycled by index. Kept away from
 // the amber/green used for the point markers themselves.
+// Indexed by place.color_index, which the API assigns by graph colouring so
+// two places that touch or nearly touch never land on the same tint.
 const POS_AREA_PALETTE = [
-  "#2563eb", "#db2777", "#7c3aed", "#0891b2", "#dc2626",
-  "#4f46e5", "#c026d3", "#0d9488", "#9333ea", "#b45309",
+  "#2563eb", "#db2777", "#0d9488", "#b45309", "#7c3aed",
+  "#dc2626", "#0891b2", "#c026d3", "#4f46e5", "#15803d",
 ];
 
 function showPosError(message) {
@@ -917,28 +921,36 @@ function posPopupHtml(kind, rows) {
         )}</dd>`
     )
     .join("");
-  const kindLabel = kind === "warehouse" ? "Warehouse" : "Locality";
+  const kindLabel =
+    kind === "warehouse" ? "Warehouse" : kind === "dormant" ? "Dormant warehouse" : "Locality";
   return `<div class="pos-popup"><span class="pos-popup-kind ${kind}">${kindLabel}</span><dl>${body}</dl></div>`;
 }
 
 function buildPosMarkers(data) {
   const warehouseIcon = posDotIcon("warehouse");
+  // Dormant warehouses get their own hue and a hollow centre: they sit inside
+  // a place but none of them helped define one.
+  const dormantIcon = posDotIcon("dormant");
   const localityIcon = posDotIcon("locality");
 
-  const warehouses = data.warehouses.map((row) => {
+  const warehouses = [];
+  const dormant = [];
+  data.warehouses.forEach((row) => {
     const marker = L.marker([row.lat, row.lon], {
-      icon: warehouseIcon,
-      kind: "warehouse",
+      icon: row.is_active ? warehouseIcon : dormantIcon,
+      kind: row.is_active ? "warehouse" : "dormant",
       title: row.name,
     });
     marker.bindPopup(
       posPopupHtml("warehouse", [
         ["dc_blinkit_warehouse_id", row.id, true],
         ["warehouse", row.name, false],
+        ["status", row.is_active ? "active — defines its place" : "dormant — assigned only", false],
         ["place_of_supply", row.pos, true],
+        ...(row.is_active ? [] : [["distance_to_supply", `${row.dist_km} km`, true]]),
       ])
     );
-    return marker;
+    (row.is_active ? warehouses : dormant).push(marker);
   });
 
   const localities = data.localities.map((row) => {
@@ -959,28 +971,31 @@ function buildPosMarkers(data) {
     return marker;
   });
 
-  return { warehouse: warehouses, locality: localities };
+  return { warehouse: warehouses, dormant, locality: localities };
 }
 
-// Cluster icon: a ring split by warehouse / locality composition, count inside.
+// Cluster icon: a ring split by active / dormant / locality composition,
+// count inside. Dormant warehouses keep their own arc so a cluster never
+// passes off 40 shuttered sites as live supply.
 function posClusterIcon(cluster) {
   const children = cluster.getAllChildMarkers();
-  let warehouseCount = 0;
-  for (const child of children) {
-    if (child.options.kind === "warehouse") warehouseCount += 1;
-  }
+  const counts = { warehouse: 0, dormant: 0, locality: 0 };
+  for (const child of children) counts[child.options.kind] += 1;
 
   const total = children.length;
-  const localityCount = total - warehouseCount;
-  const warehouseDeg = (warehouseCount / total) * 360;
+  const present = ["warehouse", "dormant", "locality"].filter((k) => counts[k] > 0);
 
   let ring;
-  if (warehouseCount === 0) {
-    ring = POS_COLORS.locality;
-  } else if (localityCount === 0) {
-    ring = POS_COLORS.warehouse;
+  if (present.length === 1) {
+    ring = POS_COLORS[present[0]];
   } else {
-    ring = `conic-gradient(${POS_COLORS.warehouse} 0deg ${warehouseDeg}deg, ${POS_COLORS.locality} ${warehouseDeg}deg 360deg)`;
+    let cursor = 0;
+    const stops = present.map((kind) => {
+      const start = cursor;
+      cursor += (counts[kind] / total) * 360;
+      return `${POS_COLORS[kind]} ${start}deg ${cursor}deg`;
+    });
+    ring = `conic-gradient(${stops.join(", ")})`;
   }
 
   // Icon diameter is kept well under maxClusterRadius so two neighbouring
@@ -1035,11 +1050,18 @@ function posArcPoints(fromLat, fromLon, toLat, toLon) {
   return points;
 }
 
+// Supply links start at the active warehouse site that actually covers the
+// store (`src_lat`/`src_lon`), not at the place's mean coordinate -- a place
+// can hold several sites, and their mean sits in open country between them.
 function posDrawLinks(place, color) {
   posClearLinks();
   const members = posLocalitiesByPlace[place.id] || [];
+  const origins = new Set();
   for (const member of members) {
-    L.polyline(posArcPoints(place.lat, place.lon, member.lat, member.lon), {
+    const srcLat = member.src_lat ?? place.lat;
+    const srcLon = member.src_lon ?? place.lon;
+    origins.add(`${srcLat},${srcLon}`);
+    L.polyline(posArcPoints(srcLat, srcLon, member.lat, member.lon), {
       color,
       weight: 1.2,
       opacity: 0.5,
@@ -1049,14 +1071,35 @@ function posDrawLinks(place, color) {
       dashArray: member.dist_km > 50 ? "5 6" : null,
     }).addTo(posLinkLayer);
   }
+
+  // Anchor each fan on its supplying site so the origin reads as a warehouse
+  // rather than as the point where the lines happen to meet.
+  for (const origin of origins) {
+    const [lat, lon] = origin.split(",").map(Number);
+    L.circleMarker([lat, lon], {
+      radius: 4,
+      color,
+      weight: 2,
+      fillColor: "#fff",
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(posLinkLayer);
+  }
 }
 
 function posPlacePopupHtml(place, color) {
   const rows = [
     ["place_of_supply", place.id, true],
-    ["cities", place.name, false],
-    ["warehouses", String(place.warehouse_count), true],
+    ["city", place.name, false],
+    ["active_warehouses", `${place.active_warehouse_count} at ${place.site_count} site(s)`, true],
+    ["dormant_warehouses", String(place.inactive_warehouse_count), true],
     ["darkstores", String(place.locality_count), true],
+    ["supply_area", `${place.area_km2.toLocaleString()} km²`, true],
+    [
+      "area_per_warehouse",
+      `${place.km2_per_warehouse.toLocaleString()} km² · ${place.area_balance}`,
+      true,
+    ],
     ["median_distance", `${place.median_km} km`, true],
     ["max_distance", `${place.max_km} km`, true],
   ];
@@ -1081,7 +1124,8 @@ function buildPosPlaces(data) {
 
   posHullLayer = L.layerGroup();
   posPlaces.forEach((place, index) => {
-    const color = POS_AREA_PALETTE[index % POS_AREA_PALETTE.length];
+    const color =
+      POS_AREA_PALETTE[(place.color_index ?? index) % POS_AREA_PALETTE.length];
     const style = {
       color,
       weight: 1.5,
@@ -1089,13 +1133,16 @@ function buildPosPlaces(data) {
       fillColor: color,
       fillOpacity: 0.07,
     };
-    const shape =
-      place.area && place.area.length >= 3
-        ? L.polygon(place.area, style)
-        : L.circle([place.lat, place.lon], { ...style, radius: 900, fillOpacity: 0.15 });
+    // `areas` is already in Leaflet's MultiPolygon shape: a list of polygons,
+    // each an outer ring followed by any holes it encloses.
+    const polygons = (place.areas || []).filter((poly) => poly?.[0]?.length >= 3);
+    const shape = polygons.length
+      ? L.polygon(polygons, style)
+      : L.circle([place.lat, place.lon], { ...style, radius: 900, fillOpacity: 0.15 });
 
     shape.bindTooltip(
-      `${place.id} · ${place.warehouse_count} WH · ${place.locality_count} darkstores`,
+      `${place.id} · ${place.active_warehouse_count} active WH · ` +
+        `${place.locality_count} darkstores · ${place.area_km2.toLocaleString()} km²`,
       { sticky: true }
     );
     shape.bindPopup(posPlacePopupHtml(place, color));
@@ -1121,22 +1168,21 @@ function refreshPosAreas() {
 function refreshPosLayers() {
   if (!posClusterGroup) return;
 
-  const showWarehouses = posToggleWarehouses.checked;
-  const showLocalities = posToggleLocalities.checked;
-
-  const active = [];
-  if (showWarehouses) active.push(...posMarkers.warehouse);
-  if (showLocalities) active.push(...posMarkers.locality);
+  const shown = [];
+  if (posToggleWarehouses.checked) shown.push(...posMarkers.warehouse);
+  if (posToggleDormant.checked) shown.push(...posMarkers.dormant);
+  if (posToggleLocalities.checked) shown.push(...posMarkers.locality);
 
   posClusterGroup.clearLayers();
-  posClusterGroup.addLayers(active);
+  posClusterGroup.addLayers(shown);
 
   posCountWarehouses.textContent = posMarkers.warehouse.length.toLocaleString();
+  posCountDormant.textContent = posMarkers.dormant.length.toLocaleString();
   posCountLocalities.textContent = posMarkers.locality.length.toLocaleString();
+  const total =
+    posMarkers.warehouse.length + posMarkers.dormant.length + posMarkers.locality.length;
   const placeSuffix = posPlaces.length ? ` · ${posPlaces.length} places` : "";
-  posCountTotal.textContent = `${active.length.toLocaleString()} of ${(
-    posMarkers.warehouse.length + posMarkers.locality.length
-  ).toLocaleString()} points plotted${placeSuffix}`;
+  posCountTotal.textContent = `${shown.length.toLocaleString()} of ${total.toLocaleString()} points plotted${placeSuffix}`;
 }
 
 // Safari still only exposes the webkit-prefixed fullscreen API.
@@ -1216,6 +1262,7 @@ function initPosMap() {
   posLinkLayer = L.layerGroup().addTo(posMap);
 
   posToggleWarehouses.addEventListener("change", refreshPosLayers);
+  posToggleDormant.addEventListener("change", refreshPosLayers);
   posToggleLocalities.addEventListener("change", refreshPosLayers);
   posToggleAreas.addEventListener("change", refreshPosAreas);
   posResetBtn.addEventListener("click", resetPosView);

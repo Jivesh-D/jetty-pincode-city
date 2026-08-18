@@ -22,7 +22,7 @@
       integrity="sha256-YU3qCpj/P06tdPBJGPax0bm6Q1wltfwjsho5TR4+TYc="
       crossorigin=""
     />
-    <link rel="stylesheet" href="/static/styles.css?v=2.3.0" />
+    <link rel="stylesheet" href="/static/styles.css?v=2.4.0" />
   </head>
   <body>
     <div class="app">
@@ -425,8 +425,14 @@
                 <label class="map-layer" for="pos-toggle-warehouses">
                   <input type="checkbox" id="pos-toggle-warehouses" checked />
                   <span class="map-swatch warehouse" aria-hidden="true"></span>
-                  <span class="map-layer-label">Warehouses</span>
+                  <span class="map-layer-label">Active warehouses</span>
                   <span class="map-count" id="pos-count-warehouses">&ndash;</span>
+                </label>
+                <label class="map-layer" for="pos-toggle-dormant">
+                  <input type="checkbox" id="pos-toggle-dormant" checked />
+                  <span class="map-swatch dormant" aria-hidden="true"></span>
+                  <span class="map-layer-label">Dormant warehouses</span>
+                  <span class="map-count" id="pos-count-dormant">&ndash;</span>
                 </label>
                 <label class="map-layer" for="pos-toggle-localities">
                   <input type="checkbox" id="pos-toggle-localities" checked />
@@ -465,7 +471,9 @@
             </div>
 
             <p class="map-hint">
-              Each tinted area is one <strong>place-of-supply</strong>: the territory nearer to its warehouses than to any
+              Only <strong>active</strong> warehouses (solid amber) define a place-of-supply; <strong>dormant</strong> ones
+              (hollow grey) are placed on the map and assigned to a place, but never draw a boundary. Each tinted area is one
+              <strong>place-of-supply</strong>: the territory nearer to its active warehouses than to any
               other place's, clipped to how far its darkstores actually reach &mdash; areas never overlap. Click an area for its
               stats and the supply links to every member darkstore (dashed beyond 50 km, including members assigned by
               Blinkit's city label into a neighbouring territory); click any point for its details. Overlapping points group
@@ -580,6 +588,6 @@
       integrity="sha256-Hk4dIpcqOSb0hZjgyvFOP+cEmDXUKKNE/tT542ZbNQg="
       crossorigin=""
     ></script>
-    <script src="/static/app.js?v=1.11.1"></script>
+    <script src="/static/app.js?v=1.16.0"></script>
   </body>
 </html>

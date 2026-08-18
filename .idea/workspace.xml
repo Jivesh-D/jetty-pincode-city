@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="need refresh">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/place_of_supply.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/place_of_supply.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place-of-supply-mapping.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place-of-supply-mapping.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/warehouse.csv" beforeDir="false" afterPath="$PROJECT_DIR$/warehouse.csv" afterDir="false" />
+    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="needed refresh added SS">
+      <change beforePath="$PROJECT_DIR$/place_of_supply.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply.csv" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -92,13 +88,22 @@
       <option name="project" value="LOCAL" />
       <updated>1787048312750</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="needed refresh added SS">
+      <option name="closed" value="true" />
+      <created>1787055593210</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1787055593210</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="added please of supply" />
     <MESSAGE value="added please of supply alteration" />
     <MESSAGE value="need refresh" />
-    <option name="LAST_COMMIT_MESSAGE" value="need refresh" />
+    <MESSAGE value="needed refresh added SS" />
+    <option name="LAST_COMMIT_MESSAGE" value="needed refresh added SS" />
   </component>
 </project>

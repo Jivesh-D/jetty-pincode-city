@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="some changes">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply_inventory_deepdive.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply_inventory_deepdive.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply_po_deepdive.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply_po_deepdive.csv" afterDir="false" />
-    </list>
+    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="INJUSTED NEW DATA" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -107,7 +102,15 @@
       <option name="project" value="LOCAL" />
       <updated>1787056202724</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="INJUSTED NEW DATA">
+      <option name="closed" value="true" />
+      <created>1787057326459</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1787057326459</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -116,6 +119,7 @@
     <MESSAGE value="need refresh" />
     <MESSAGE value="needed refresh added SS" />
     <MESSAGE value="some changes" />
-    <option name="LAST_COMMIT_MESSAGE" value="some changes" />
+    <MESSAGE value="INJUSTED NEW DATA" />
+    <option name="LAST_COMMIT_MESSAGE" value="INJUSTED NEW DATA" />
   </component>
 </project>

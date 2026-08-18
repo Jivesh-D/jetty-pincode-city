@@ -1490,9 +1490,14 @@ function poseFormatCell(col, row) {
     }`;
   }
 
+  // Only a fully Scheduled PO is on track. Everything else is flagged:
+  // Expired is the dead end and gets red, the rest -- Partially Scheduled,
+  // Unscheduled, Fulfilled, and any state added later -- get amber.
   if (col.type === "po-state") {
     if (!raw) return '<span class="pose-muted">—</span>';
-    const cls = raw.toLowerCase().startsWith("partial") ? "status-invalid" : "status-ok";
+    const state = raw.toLowerCase();
+    const cls =
+      state === "scheduled" ? "status-ok" : state === "expired" ? "status-error" : "status-invalid";
     return `<span class="status-pill ${cls}">${escapeHtml(raw)}</span>`;
   }
 

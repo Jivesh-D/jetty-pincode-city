@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="added please of supply alteration">
+    <list default="true" id="b90fde55-2bd1-46f3-b3ed-ffb33cf43f30" name="Changes" comment="need refresh">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply_inventory_deepdive.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply_inventory_deepdive.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/place_of_supply_po_deepdive.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place_of_supply_po_deepdive.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/place_of_supply.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/place_of_supply.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/place-of-supply-mapping.csv" beforeDir="false" afterPath="$PROJECT_DIR$/place-of-supply-mapping.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/warehouse.csv" beforeDir="false" afterPath="$PROJECT_DIR$/warehouse.csv" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,18 +16,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Jivesh-D"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Jivesh-D&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Jivesh-D/jetty-pincode-city.git",
-    "accountId": "153820c6-a245-4ed4-a6f9-e31f06b6c2d4"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Jivesh-D/jetty-pincode-city.git&quot;,
+    &quot;accountId&quot;: &quot;153820c6-a245-4ed4-a6f9-e31f06b6c2d4&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 5
 }</component>
@@ -42,7 +43,7 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.restore.workspace.module": "true",
-    "git-widget-placeholder": "place-of-supply-active-warehouses",
+    "git-widget-placeholder": "main",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "/Users/jiveshdahiya/Documents/GitHub/jetty-pincode-city"
   }
@@ -83,12 +84,21 @@
       <option name="project" value="LOCAL" />
       <updated>1786613225791</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="need refresh">
+      <option name="closed" value="true" />
+      <created>1787048312750</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1787048312750</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="added please of supply" />
     <MESSAGE value="added please of supply alteration" />
-    <option name="LAST_COMMIT_MESSAGE" value="added please of supply alteration" />
+    <MESSAGE value="need refresh" />
+    <option name="LAST_COMMIT_MESSAGE" value="need refresh" />
   </component>
 </project>

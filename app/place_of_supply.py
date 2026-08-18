@@ -528,16 +528,23 @@ def _place_areas(
         cache: dict[object, list[tuple[int, int]]] = {}
         built: list[list[list[tuple[float, float]]]] = []
         for index, cells in enumerate(by_place):
-            outers: list[list[tuple[float, float]]] = []
-            holes: list[list[tuple[float, float]]] = []
+            traced: list[tuple[float, list[tuple[float, float]]]] = []
             for ring in _trace_labelled_rings(cells, owner, index):
                 simple = _simplify_shared(ring, index, cache, strict)
                 if len(simple) < 3:
                     continue
-                area = _signed_area_km2(simple)
-                if abs(area) < _MIN_RING_KM2:
-                    continue
-                (outers if area > 0 else holes).append(simple)
+                traced.append((_signed_area_km2(simple), simple))
+
+            # The sliver threshold is there to drop raster crumbs from a place
+            # that also holds real ground -- it must never delete the place
+            # itself. A lone site in a small city (Gangtok, Udupi) hulls to a
+            # ~28 km2 disk, under the threshold in its entirety, so a place
+            # left with nothing keeps its largest ring and stays on the map.
+            all_outers = [(area, ring) for area, ring in traced if area > 0]
+            outers = [ring for area, ring in all_outers if area >= _MIN_RING_KM2]
+            if not outers and all_outers:
+                outers = [max(all_outers, key=lambda item: item[0])[1]]
+            holes = [ring for area, ring in traced if area < 0 and -area >= _MIN_RING_KM2]
 
             # Losing a contested lens can leave a place wrapped around a
             # neighbour; nest such a void into its enclosing ring so it renders

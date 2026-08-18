@@ -682,6 +682,11 @@ body {
   background: #d97706;
 }
 
+.map-swatch.dormant {
+  background: #fff;
+  box-shadow: inset 0 0 0 2.5px #94a3b8;
+}
+
 .map-swatch.locality {
   background: #0e8f68;
 }
@@ -757,6 +762,16 @@ body {
 
 .pos-dot.locality {
   background: #0e8f68;
+}
+
+/* Dormant warehouses: hollow, cooler hue and a touch smaller, so a live
+   feeder never reads the same as a shuttered one. */
+.pos-dot.dormant {
+  width: 11px;
+  height: 11px;
+  background: #fff;
+  border: 2.5px solid #94a3b8;
+  box-shadow: 0 1px 2px rgba(23, 20, 60, 0.25);
 }
 
 /* Two-tone cluster ring --------------------------------------------------- */

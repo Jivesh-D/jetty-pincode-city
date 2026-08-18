@@ -1025,6 +1025,12 @@ a.btn {
   color: var(--muted-2);
 }
 
+.pose-date-col {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 .pose-img-col {
   width: 44px;
   padding-top: 0.35rem;

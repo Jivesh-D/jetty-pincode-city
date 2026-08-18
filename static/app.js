@@ -1396,6 +1396,9 @@ const POSE_DD_PO_COLUMNS = [
   { key: "wh_name", label: "Warehouse" },
   { key: "dc_blinkit_internal_city", label: "City" },
   { key: "po_state", label: "PO State", type: "po-state" },
+  { key: "create_dt", label: "Created", type: "date" },
+  { key: "appointment_ts", label: "Appointment", type: "date" },
+  { key: "expiry_ts", label: "Expiry", type: "date" },
   { key: "item_id", label: "Item ID", mono: true },
   { key: "units_ordered", label: "Units Ordered", num: 0 },
   { key: "remaining_quantity", label: "Remaining Qty", num: 0 },
@@ -1493,6 +1496,16 @@ function poseFormatCell(col, row) {
     return `<span class="status-pill ${cls}">${escapeHtml(raw)}</span>`;
   }
 
+  // PO dates arrive as plain YYYY-MM-DD strings; render them as "04 May 2026"
+  // and keep the ISO value in the title for copy/paste.
+  if (col.type === "date") {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+    if (!parts) return raw ? escapeHtml(raw) : '<span class="pose-muted">—</span>';
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[Number(parts[2]) - 1] || parts[2];
+    return `<span class="pose-date" title="${escapeAttr(raw)}">${parts[3]} ${month} ${parts[1]}</span>`;
+  }
+
   if (col.num !== undefined) {
     const value = Number(raw);
     if (raw === "" || Number.isNaN(value)) return '<span class="pose-muted">—</span>';
@@ -1511,6 +1524,7 @@ function poseCellClass(col) {
   if (col.mono) classes.push("pincode-col");
   if (col.num !== undefined) classes.push("pose-num");
   if (col.type === "image") classes.push("pose-img-col");
+  if (col.type === "date") classes.push("pose-date-col");
   return classes.length ? ` class="${classes.join(" ")}"` : "";
 }
 

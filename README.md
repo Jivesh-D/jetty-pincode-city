@@ -118,12 +118,12 @@ Returns the Blinkit warehouse and locality coordinates that the
 {
   "warehouses": [
     {"id": "76857989", "name": "RAIPUR - FEEDER WAREHOUSE", "city": "raipur",
-     "lat": 21.2380912, "lon": 81.6336993, "is_active": false,
-     "pos": "nagpur", "basis": "nearest", "dist_km": 294.5}
+     "lat": 21.2380912, "lon": 81.6336993, "is_active": true,
+     "pos": "raipur", "basis": "site", "dist_km": 0.0}
   ],
   "localities": [
     {"store_id": "29581", "store_name": "Super Store - Delhi Jhilmil ES1", "city": "delhi",
-     "lat": 28.674685, "lon": 77.30319, "pos": "noida", "basis": "nearest", "dist_km": 13.6}
+     "lat": 28.674685, "lon": 77.30319, "pos": "noida", "basis": "city-majority", "dist_km": 17.69}
   ],
   "places": [
     {"id": "bengaluru", "name": "bengaluru", "lat": 12.957067, "lon": 77.784800,
@@ -201,8 +201,8 @@ points merge into a single ring whose colour is split by its warehouse /
 locality composition, with the point count in the middle; zooming in breaks
 the rings apart. Points that share the *exact* same coordinate can never be
 separated by zoom, so clicking their ring fans them out on legs instead
-&mdash; `warehouse.csv` alone has 74 such coordinate groups, the largest
-holding 102 warehouses at a single point in Hyderabad.
+&mdash; `warehouse.csv` alone has 75 such coordinate groups, the largest
+holding 99 warehouses at a single point in Hyderabad.
 
 Clicking a point shows `dc_blinkit_warehouse_id` and `warehouse` for a
 warehouse, or `store_id`, `store_name` and `dc_blinkit_internal_city` for a
@@ -243,34 +243,42 @@ influence the definition. On the map they are drawn as hollow dots.
   independent points, so in those cities a store both supplies and is supplied,
   from coordinates a few km apart. It widens those hulls slightly; it is data
   drift, not a geometry fault.
-- Each darkstore (and each dormant warehouse) is assigned to the place of its
-  own `dc_blinkit_internal_city` when that city has an active warehouse
-  &mdash; that label is Blinkit's own operational grouping &mdash; **unless**
-  another place is more than 25 km closer (`LABEL_OVERRIDE_KM`), which
-  indicates a mislabel. Everything else attaches to the nearest place by
-  haversine distance.
+- **One city, one place.** A place of supply is a cluster of darkstores and
+  warehouses, and a `dc_blinkit_internal_city` belongs to exactly one of them:
+  many cities may share a place, but no city is ever split across two. A city
+  that has an active warehouse is its own place, and every one of its
+  darkstores and dormant warehouses goes there (`label`). Every other city is
+  attached **as a whole** to the place that the majority of its points are
+  nearest to by haversine distance (`city-nearest` when every point agrees,
+  `city-majority` otherwise; ties break on the smallest mean distance). The
+  module asserts the rule before returning and refuses to serve a mapping that
+  violates it. Delhi, for instance, straddles Noida, Gurgaon and Faridabad
+  geographically, but all 231 of its points sit in `noida`.
+- Points more than 200 km from their city's place (`OUTLIER_KM`) &mdash; either
+  a genuinely far-flung city such as Jodhpur served from Jaipur, or a reused
+  label such as a "bardoli" store 900 km from Bardoli &mdash; keep the city's
+  place but are left out of its hull, so one distant point cannot stretch an
+  area across half the country. Each such city is logged as a warning on
+  startup; 124 points in 32 cities are affected today.
 - The map draws each place as a single tinted **supply area**, starting from
   the convex hull of its active warehouse sites and every darkstore assigned to
   it, expanded by a 3 km margin so points sit inside the shape rather than on
-  its edge. One place is one shape in one colour &mdash; 45 places, 45
-  polygons, 831 vertices in total. Dormant warehouses are deliberately left out
+  its edge. One place is one shape in one colour &mdash; 45 places, 46
+  polygons. Dormant warehouses are deliberately left out
   of the hull: they are assigned to a place but supply nothing from it, and one
   shuttered site 350 km away would stretch the whole area to reach it.
-- **Areas never overlap.** Hulls are convex, so two can intersect where
-  Blinkit's city label sends a darkstore across a border &mdash; most visibly
-  in Delhi NCR. Rather than layer the fills, the hulls are resolved into a
+- **Areas never overlap.** Hulls are convex, so two can intersect where a
+  city's catchment reaches across a neighbour's &mdash; most visibly in Delhi
+  NCR, where the whole of `delhi` belongs to Noida. Rather than layer the fills, the hulls are resolved into a
   partition: the map is rasterised on a 1.5 km grid and any cell claimed by
   more than one hull goes to the place whose own served points lie nearest.
   Every shared border is then simplified **once** and reused by both sides, so
   the two neighbours draw the identical line and cannot drift apart. Verified
-  exhaustively on a 2 km lattice: of 259,883 sample points inside shaded
-  ground, **0 fell inside more than one place**.
+  so that no sample point inside shaded ground falls in more than one place.
 - Because a darkstore is at zero distance from itself, that rule cannot pull
-  ground out from under the store that put it there: all 113 active warehouses
-  and 2,437 of 2,440 darkstores sit inside their own place's area. The three
-  exceptions are Delhi NCR stores belonging to different places that sit within
-  one grid cell of each other &mdash; at any finite resolution one of them has
-  to lose the cell.
+  ground out from under the store that put it there: every active warehouse
+  and every darkstore within `OUTLIER_KM` of its place sits inside its own
+  place's area.
 - Rings under `_MIN_RING_KM2` (60 km&sup2;) are dropped as raster slivers, but
   **a place always keeps its largest ring**. A lone site with one nearby
   darkstore hulls to a ~28 km&sup2; disk, entirely under that threshold; without
@@ -284,29 +292,26 @@ influence the definition. On the map they are drawn as hollow dots.
 
 **Proportionality and its exceptions.** Every place reports `area_km2`,
 `km2_per_warehouse` and an `area_balance` flag comparing it to the national
-median. Of the 45 places 18 come out `proportional`; the 13 `concentrated`
-ones are metros such as Noida, Gurgaon and Mumbai, plus the new single-store
-places (Gangtok, Udupi, Srinagar) whose catchment is one town, and the 14
+median. Of the 45 places 20 come out `proportional`; the 15 `concentrated`
+ones are metros such as Noida, Gurgaon and Mumbai, plus the single-store
+places (Gangtok, Udupi, Srinagar) whose catchment is one town, and the 10
 `stretched` ones are single feeders whose darkstores are scattered across most
 of a state. Reach is set by geography and by where the nearest other warehouse
 sits, so the ratio is driven mainly by density &mdash; the flag is what makes
 those exceptions visible rather than hidden.
 
-**Accuracy.** Checked against Blinkit's own `city` &rarr; `pos_city` pairs in
-`place_of_supply.csv`: across the 142 cities it covers, the inference agrees on
-115 (81%). **All 27 disagreements are cities now served by one of the 13 places
-that the latest `warehouse.csv` activated** &mdash; `jammu` was routed to
-`ludhiana`, `siliguri` to `guwahati`, `gorakhpur` to `varanasi`, and so on,
-because `place_of_supply.csv` is a snapshot from before those places existed.
-Restricted to the 32 places that predate the activation the inference is
-**115/115 (100%)**, and not one miss lands on a pre-existing place. Read the 81%
-as the truth file lagging the warehouse file, not as a weaker inference; it will
-return to ~100% once `place_of_supply.csv` is refreshed.
+**Accuracy.** `place_of_supply.csv` and the two `*_deepdive.csv` files are
+downstream of this mapping, so they play no part in defining it; they are only
+useful as a sanity check. Across the 142 `city` &rarr; `pos_city` pairs in
+`place_of_supply.csv` the inference agrees on 140 (99%). The two misses are
+border towns with a single store each &mdash; `kishangarh` (jaipur vs gurgaon)
+and `muzaffarnagar` (kundli vs dasna) &mdash; where the nearest place by
+distance differs from the one Blinkit chose.
 
 `GET /api/place-of-supply/mapping.csv` downloads the full assignment: one row
 per warehouse and darkstore with `is_active`, `place_of_supply`,
-`assignment_basis` (`site`, `label`, `label+nearest`, `nearest`,
-`label-overridden`), `distance_km` and the place's warehouse, darkstore and
+`assignment_basis` (`site`, `label`, `city-nearest`, `city-majority`),
+`distance_km` and the place's warehouse, darkstore and
 area statistics.
 
 ## Data source

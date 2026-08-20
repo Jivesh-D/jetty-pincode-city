@@ -23,16 +23,21 @@ MIN_LON, MAX_LON = 66.0, 98.0
 # never size an area.
 ACTIVE_VALUES = {"1", "true", "yes", "y", "t"}
 
-# A darkstore is assigned to the place of its own dc_blinkit_internal_city
-# when that city has an active warehouse -- that label is Blinkit's own
-# operational grouping -- unless a different place is closer by more than this
-# many km, which indicates the label is wrong (e.g. a "mumbai"-labeled store
-# physically sitting in Nashik). Points in cities with no active warehouse
-# attach to the nearest place by distance.
-LABEL_OVERRIDE_KM = 25.0
-
+# A place of supply is a cluster of darkstores and warehouses, and a
+# dc_blinkit_internal_city belongs to exactly one of them: many cities may
+# share a place, but no city is ever split across two. Cities that host an
+# active warehouse are their own place; every other city is attached as a
+# whole to the place that the majority of its points are nearest to.
+#
 # Assignments beyond this distance are flagged as remote in the place stats.
 REMOTE_KM = 50.0
+
+# A point this far from its city's place is either a genuinely far-flung city
+# (Jodhpur served from Jaipur) or a reused city label (a "bardoli" store 900 km
+# from Bardoli). Either way it keeps the city's place -- the one-city-one-place
+# rule is absolute -- but it is left out of the hull so one distant point
+# cannot stretch a place across half the country.
+OUTLIER_KM = 200.0
 
 EARTH_RADIUS_KM = 6371.0088
 
@@ -599,43 +604,29 @@ def _slug(text: str) -> str:
     return "-".join(text.lower().split())
 
 
-def _assign(
+def _place_distances(
     lat: float,
     lon: float,
-    city: str,
     sites: list[dict[str, object]],
     site_indices_by_place: list[list[int]],
-    place_by_city: dict[str, int],
-) -> tuple[int, int, float, str]:
-    """Attach one point to a place. Returns (place, nearest site, km, basis)."""
+) -> tuple[list[float], list[float]]:
+    """Distance from one point to every site, and to every place (its nearest
+    site)."""
     site_km = [_haversine_km(lat, lon, site["lat"], site["lon"]) for site in sites]
     place_km = [min(site_km[i] for i in indices) for indices in site_indices_by_place]
-
-    nearest = min(range(len(place_km)), key=place_km.__getitem__)
-    own = place_by_city.get(city)
-
-    if own is None:
-        place, basis = nearest, "nearest"
-    elif place_km[own] - place_km[nearest] > LABEL_OVERRIDE_KM:
-        place, basis = nearest, "label-overridden"
-    else:
-        place = own
-        basis = "label+nearest" if own == nearest else "label"
-
-    host = min(site_indices_by_place[place], key=lambda i: site_km[i])
-    return place, host, place_km[place], basis
+    return site_km, place_km
 
 
 def _compute_places(
     warehouses: list[dict[str, object]], localities: list[dict[str, object]]
 ) -> list[dict[str, object]]:
     """Define places of supply from the active warehouses, then attach every
-    darkstore and every dormant warehouse to one.
+    city -- and with it every darkstore and dormant warehouse -- to one.
 
     A *site* is one unique active-warehouse coordinate; a *place* is every site
     sharing a dc_blinkit_internal_city. Cities with no active warehouse do not
-    become places -- nothing ships from them -- their points fall to whichever
-    active place is nearest.
+    become places -- nothing ships from them -- the whole city goes to the
+    place that most of its points are nearest to, so a city is never split.
     """
     active = [w for w in warehouses if w["is_active"]]
     if not active:
@@ -667,7 +658,6 @@ def _compute_places(
             site_indices_by_place[place].append(site_index)
         sites[site_index]["warehouses"].append(index)
 
-    place_of_site = [site["place"] for site in sites]
     place_count = len(site_indices_by_place)
 
     # Active warehouses define their own place; everything else is attached.
@@ -678,40 +668,85 @@ def _compute_places(
         warehouse["src_lat"] = warehouse["lat"]
         warehouse["src_lon"] = warehouse["lon"]
 
-    inactive_counts = [0] * place_count
-    for warehouse in warehouses:
-        if warehouse["is_active"]:
-            continue
-        place, host, km, basis = _assign(
-            warehouse["lat"], warehouse["lon"], warehouse["city"],
-            sites, site_indices_by_place, place_by_city,
+    # Every other point, grouped by city. Distances are computed once here and
+    # reused for both the city vote and the per-point attachment.
+    attached = [w for w in warehouses if not w["is_active"]] + list(localities)
+    points_by_city: dict[str, list[dict[str, object]]] = {}
+    for point in attached:
+        point["_site_km"], point["_place_km"] = _place_distances(
+            point["lat"], point["lon"], sites, site_indices_by_place
         )
-        warehouse["pos_index"] = place
-        warehouse["basis"] = basis
-        warehouse["dist_km"] = round(km, 2)
-        warehouse["src_lat"] = sites[host]["lat"]
-        warehouse["src_lon"] = sites[host]["lon"]
-        inactive_counts[place] += 1
+        points_by_city.setdefault(point["city"], []).append(point)
 
-    # Darkstores. `host` is the nearest site within the assigned place; it is
-    # where the store's supply link starts.
+    # City vote: a city with its own active warehouse is its own place
+    # ("label"); any other city goes, whole, to the place that the most of
+    # its points are nearest to ("city-majority"; "city-nearest" when every
+    # point agrees). Ties break on the smallest mean distance.
+    basis_by_city: dict[str, str] = {}
+    for city, points in points_by_city.items():
+        if city in place_by_city:
+            basis_by_city[city] = "label"
+            continue
+        votes = [0] * place_count
+        total_km = [0.0] * place_count
+        for point in points:
+            place_km = point["_place_km"]
+            votes[min(range(place_count), key=place_km.__getitem__)] += 1
+            for place_index, km in enumerate(place_km):
+                total_km[place_index] += km
+        winner = max(range(place_count), key=lambda i: (votes[i], -total_km[i]))
+        place_by_city[city] = winner
+        basis_by_city[city] = "city-nearest" if votes[winner] == len(points) else "city-majority"
+
+    inactive_counts = [0] * place_count
     locality_km: list[list[float]] = [[] for _ in range(place_count)]
     served: list[list[tuple[float, float]]] = [[] for _ in range(place_count)]
-    for locality in localities:
-        place, host, km, basis = _assign(
-            locality["lat"], locality["lon"], locality["city"],
-            sites, site_indices_by_place, place_by_city,
-        )
-        locality["pos_index"] = place
-        locality["basis"] = basis
-        locality["dist_km"] = round(km, 2)
-        # The site actually covering this store -- a place can hold several,
+    outliers_by_city: dict[str, list[float]] = {}
+    for point in attached:
+        place = place_by_city[point["city"]]
+        site_km = point.pop("_site_km")
+        km = point.pop("_place_km")[place]
+        # The site actually covering this point -- a place can hold several,
         # and a supply link drawn from the place's mean coordinate would start
         # in open country between them.
-        locality["src_lat"] = sites[host]["lat"]
-        locality["src_lon"] = sites[host]["lon"]
+        host = min(site_indices_by_place[place], key=lambda i: site_km[i])
+        point["pos_index"] = place
+        point["basis"] = basis_by_city[point["city"]]
+        point["dist_km"] = round(km, 2)
+        point["src_lat"] = sites[host]["lat"]
+        point["src_lon"] = sites[host]["lon"]
+        if km > OUTLIER_KM:
+            outliers_by_city.setdefault(point["city"], []).append(km)
+
+        if "store_id" not in point:
+            inactive_counts[place] += 1
+            continue
         locality_km[place].append(km)
-        served[place].append((locality["lat"], locality["lon"]))
+        if km <= OUTLIER_KM:
+            served[place].append((point["lat"], point["lon"]))
+
+    for city, distances in sorted(outliers_by_city.items()):
+        logger.warning(
+            "place-of-supply: city %r is attached to %r but %d of its points are "
+            "more than %d km away (max %.0f km); a far-flung city or a reused "
+            "label -- kept with the city, left out of the hull",
+            city,
+            place_cities[place_by_city[city]],
+            len(distances),
+            OUTLIER_KM,
+            max(distances),
+        )
+
+    # The rule this module exists to uphold: one city, one place.
+    places_of_city: dict[str, set[int]] = {}
+    for point in (*warehouses, *localities):
+        places_of_city.setdefault(point["city"], set()).add(point["pos_index"])
+    split = {city: s for city, s in places_of_city.items() if len(s) > 1}
+    if split:
+        raise PlaceOfSupplyDataError(
+            "dc_blinkit_internal_city assigned to more than one place of supply: "
+            + ", ".join(f"{c} -> {sorted(place_cities[i] for i in s)}" for c, s in sorted(split.items()))
+        )
 
     # Geometry. The hull encloses the active sites and the darkstores they
     # serve. Dormant warehouses are deliberately left out: they are assigned to

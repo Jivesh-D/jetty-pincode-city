@@ -550,6 +550,11 @@ body {
   background: var(--danger-bg);
 }
 
+.status-neutral {
+  color: var(--muted);
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+
 .btn.loading {
   position: relative;
   color: transparent;
@@ -1023,6 +1028,27 @@ a.btn {
 
 .pose-muted {
   color: var(--muted-2);
+}
+
+.pose-issue {
+  text-transform: capitalize;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.pose-remark-col {
+  min-width: 260px;
+  max-width: 360px;
+}
+
+.pose-remark {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .pose-date-col {

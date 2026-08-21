@@ -1362,6 +1362,10 @@ const POSE_MAIN_COLUMNS = [
   { key: "item_id", label: "Item ID", mono: true },
   { key: "variant_id", label: "Variant ID", mono: true },
   { key: "sales_countribution", label: "Sales %", num: 2, suffix: "%" },
+  { key: "impact_level", label: "Impact", type: "impact-level" },
+  { key: "impact_factor", label: "Impact Factor", num: 3 },
+  { key: "issue_type", label: "Issue", type: "issue-type" },
+  { key: "remark", label: "Remark", type: "remark", sortable: false },
   { key: "osa_d3", label: "OSA D-3", num: 0, suffix: "%" },
   { key: "osa_d2", label: "OSA D-2", num: 0, suffix: "%" },
   { key: "osa_d1", label: "OSA D-1", num: 0, suffix: "%" },
@@ -1405,10 +1409,13 @@ const POSE_DD_PO_COLUMNS = [
   { key: "total_amount", label: "PO Value", num: 0, prefix: "₹" },
 ];
 
+// Sort order for impact_level -- alphabetical would put Critical next to Low.
+const POSE_IMPACT_RANK = { trivial: 0, low: 1, moderate: 2, high: 3, critical: 4 };
+
 let poseRows = [];
 let poseLoadStarted = false;
 let poseSelectedIndex = null;
-let poseSort = { key: "sales_countribution", dir: "desc" };
+let poseSort = { key: "impact_factor", dir: "desc" };
 const poseDeepdiveCache = new Map();
 let posePassword = sessionStorage.getItem("pose-password") || "";
 
@@ -1490,6 +1497,32 @@ function poseFormatCell(col, row) {
     }`;
   }
 
+  // Impact level is an ordinal: Critical/High are red, Moderate amber,
+  // Low/Trivial neutral.
+  if (col.type === "impact-level") {
+    if (!raw) return '<span class="pose-muted">—</span>';
+    const level = raw.toLowerCase();
+    const cls =
+      level === "critical" || level === "high"
+        ? "status-error"
+        : level === "moderate"
+          ? "status-invalid"
+          : "status-neutral";
+    return `<span class="status-pill ${cls}">${escapeHtml(raw)}</span>`;
+  }
+
+  // Issue types are SNAKE_CASE codes; show them as words, keep the code in the title.
+  if (col.type === "issue-type") {
+    if (!raw) return '<span class="pose-muted">—</span>';
+    const words = raw.toLowerCase().replace(/_/g, " ");
+    return `<span class="pose-issue" title="${escapeAttr(raw)}">${escapeHtml(words)}</span>`;
+  }
+
+  if (col.type === "remark") {
+    if (!raw) return '<span class="pose-muted">—</span>';
+    return `<div class="pose-remark" title="${escapeAttr(raw)}">${escapeHtml(raw)}</div>`;
+  }
+
   // Only a fully Scheduled PO is on track. Everything else is flagged:
   // Expired is the dead end and gets red, the rest -- Partially Scheduled,
   // Unscheduled, Fulfilled, and any state added later -- get amber.
@@ -1530,6 +1563,7 @@ function poseCellClass(col) {
   if (col.num !== undefined) classes.push("pose-num");
   if (col.type === "image") classes.push("pose-img-col");
   if (col.type === "date") classes.push("pose-date-col");
+  if (col.type === "remark") classes.push("pose-remark-col");
   return classes.length ? ` class="${classes.join(" ")}"` : "";
 }
 
@@ -1544,7 +1578,7 @@ function poseVisibleRows() {
   }
   if (query) {
     rows = rows.filter(({ row }) =>
-      [row.item_name, row.item_id, row.variant_id]
+      [row.item_name, row.item_id, row.variant_id, row.issue_type, row.remark]
         .some((field) => (field || "").toLowerCase().includes(query))
     );
   }
@@ -1562,6 +1596,11 @@ function poseVisibleRows() {
         const fa = Number.isNaN(na) ? -Infinity : na;
         const fb = Number.isNaN(nb) ? -Infinity : nb;
         return (fa - fb) * dir;
+      }
+      if (col.type === "impact-level") {
+        const ra = POSE_IMPACT_RANK[String(va).toLowerCase()] ?? -1;
+        const rb = POSE_IMPACT_RANK[String(vb).toLowerCase()] ?? -1;
+        return (ra - rb) * dir;
       }
       return String(va).localeCompare(String(vb)) * dir;
     });

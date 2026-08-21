@@ -39,6 +39,25 @@ REMOTE_KM = 50.0
 # cannot stretch a place across half the country.
 OUTLIER_KM = 200.0
 
+# Warehouse cities that are merged into one place of supply. By default every
+# city hosting an active warehouse is its own place; the cities listed here
+# instead pool their sites under the given place name. Delhi NCR is one market
+# served from six warehouse cities ringing it, and a darkstore in Delhi is no
+# more "noida's" than "gurgaon's" -- so the six are one place.
+PLACE_MERGES: dict[str, frozenset[str]] = {
+    "delhi ncr": frozenset(
+        {"farukhnagar", "noida", "faridabad", "dasna", "gurgaon", "kundli"}
+    ),
+}
+_PLACE_OF_CITY: dict[str, str] = {
+    city: place for place, cities in PLACE_MERGES.items() for city in cities
+}
+
+
+def _place_name(city: str) -> str:
+    """The place a warehouse city defines: itself unless it is merged."""
+    return _PLACE_OF_CITY.get(city, city)
+
 EARTH_RADIUS_KM = 6371.0088
 
 
@@ -624,7 +643,8 @@ def _compute_places(
     city -- and with it every darkstore and dormant warehouse -- to one.
 
     A *site* is one unique active-warehouse coordinate; a *place* is every site
-    sharing a dc_blinkit_internal_city. Cities with no active warehouse do not
+    sharing a dc_blinkit_internal_city (or a PLACE_MERGES group of cities, such
+    as Delhi NCR). Cities with no active warehouse do not
     become places -- nothing ships from them -- the whole city goes to the
     place that most of its points are nearest to, so a city is never split.
     """
@@ -644,9 +664,11 @@ def _compute_places(
     for index, warehouse in enumerate(active):
         city = warehouse["city"]
         if city not in place_by_city:
-            place_by_city[city] = len(site_indices_by_place)
-            site_indices_by_place.append([])
-            place_cities.append(city)
+            name = _place_name(city)
+            if name not in place_cities:
+                place_cities.append(name)
+                site_indices_by_place.append([])
+            place_by_city[city] = place_cities.index(name)
         place = place_by_city[city]
 
         coord = (warehouse["lat"], warehouse["lon"])

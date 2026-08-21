@@ -231,11 +231,13 @@ the mapping, attached to whichever place now covers them, but they never
 influence the definition. On the map they are drawn as hollow dots.
 
 - A **site** is one unique active-warehouse coordinate (106 of them); a
-  **place** is every site sharing a `dc_blinkit_internal_city` (45 of them).
-  Bengaluru's three feeders are one place; Delhi NCR's six warehouse cities
-  stay six places, matching Blinkit's own `pos_city` vocabulary. The 311
-  cities with no active warehouse do not become places &mdash; nothing ships
-  from them.
+  **place** is every site sharing a `dc_blinkit_internal_city` (40 of them).
+  Bengaluru's three feeders are one place. `PLACE_MERGES` pools named
+  warehouse cities into one place: Delhi NCR's six warehouse cities &mdash;
+  `noida`, `gurgaon`, `faridabad`, `farukhnagar`, `dasna` and `kundli`, which
+  Blinkit's `pos_city` vocabulary keeps apart &mdash; are one `delhi ncr`
+  place with eight sites. The 311 cities with no active warehouse do not
+  become places &mdash; nothing ships from them.
 - Many of the active sites are **Super Stores that are also darkstores**: 55
   of them appear again in `localities.csv` under their `Super Store ...` name,
   and the two files disagree on where they are by a median 4.5 km (max 13 km).
@@ -252,8 +254,8 @@ influence the definition. On the map they are drawn as hollow dots.
   nearest to by haversine distance (`city-nearest` when every point agrees,
   `city-majority` otherwise; ties break on the smallest mean distance). The
   module asserts the rule before returning and refuses to serve a mapping that
-  violates it. Delhi, for instance, straddles Noida, Gurgaon and Faridabad
-  geographically, but all 231 of its points sit in `noida`.
+  violates it. Delhi, for instance, is ringed by the six NCR warehouse
+  cities, and all 214 of its darkstores sit in `delhi ncr`.
 - Points more than 200 km from their city's place (`OUTLIER_KM`) &mdash; either
   a genuinely far-flung city such as Jodhpur served from Jaipur, or a reused
   label such as a "bardoli" store 900 km from Bardoli &mdash; keep the city's
@@ -263,13 +265,12 @@ influence the definition. On the map they are drawn as hollow dots.
 - The map draws each place as a single tinted **supply area**, starting from
   the convex hull of its active warehouse sites and every darkstore assigned to
   it, expanded by a 3 km margin so points sit inside the shape rather than on
-  its edge. One place is one shape in one colour &mdash; 45 places, 46
+  its edge. One place is one shape in one colour &mdash; 40 places, 41
   polygons. Dormant warehouses are deliberately left out
   of the hull: they are assigned to a place but supply nothing from it, and one
   shuttered site 350 km away would stretch the whole area to reach it.
 - **Areas never overlap.** Hulls are convex, so two can intersect where a
-  city's catchment reaches across a neighbour's &mdash; most visibly in Delhi
-  NCR, where the whole of `delhi` belongs to Noida. Rather than layer the fills, the hulls are resolved into a
+  city's catchment reaches across a neighbour's. Rather than layer the fills, the hulls are resolved into a
   partition: the map is rasterised on a 1.5 km grid and any cell claimed by
   more than one hull goes to the place whose own served points lie nearest.
   Every shared border is then simplified **once** and reused by both sides, so
@@ -286,27 +287,28 @@ influence the definition. On the map they are drawn as hollow dots.
   area in their stats and yet draw no shape at all.
 - Colours come from the API as `color_index`, assigned by greedy graph
   colouring over hulls that touch or come within 25 km, so no two neighbouring
-  places share a tint. Five colours suffice for all 45 places.
+  places share a tint. Three colours suffice for all 40 places.
 - Clicking an area shows its stats and fans out supply links to every member
   darkstore, each starting at the warehouse site that actually covers it.
 
 **Proportionality and its exceptions.** Every place reports `area_km2`,
 `km2_per_warehouse` and an `area_balance` flag comparing it to the national
-median. Of the 45 places 20 come out `proportional`; the 15 `concentrated`
-ones are metros such as Noida, Gurgaon and Mumbai, plus the single-store
-places (Gangtok, Udupi, Srinagar) whose catchment is one town, and the 10
-`stretched` ones are single feeders whose darkstores are scattered across most
-of a state. Reach is set by geography and by where the nearest other warehouse
+median. Of the 40 places 18 come out `proportional` &mdash; Delhi NCR among
+them, its eight sites and 60,000 km&sup2; landing almost exactly on the
+median; the 12 `concentrated` ones are Mumbai plus the single-store places
+(Gangtok, Udupi, Srinagar) whose catchment is one town, and the 10 `stretched`
+ones are single feeders whose darkstores are scattered across most of a
+state. Reach is set by geography and by where the nearest other warehouse
 sits, so the ratio is driven mainly by density &mdash; the flag is what makes
 those exceptions visible rather than hidden.
 
 **Accuracy.** `place_of_supply.csv` and the two `*_deepdive.csv` files are
 downstream of this mapping, so they play no part in defining it; they are only
-useful as a sanity check. Across the 142 `city` &rarr; `pos_city` pairs in
-`place_of_supply.csv` the inference agrees on 140 (99%). The two misses are
-border towns with a single store each &mdash; `kishangarh` (jaipur vs gurgaon)
-and `muzaffarnagar` (kundli vs dasna) &mdash; where the nearest place by
-distance differs from the one Blinkit chose.
+useful as a sanity check. Across the 139 `city` &rarr; `pos_city` pairs in
+`place_of_supply.csv` the inference agrees on 138 (99%), counting the six NCR
+`pos_city` values as `delhi ncr`. The one miss is a border town with a single
+store &mdash; `kishangarh` (Blinkit says jaipur, distance says delhi ncr)
+&mdash; where the nearest place differs from the one Blinkit chose.
 
 `GET /api/place-of-supply/mapping.csv` downloads the full assignment: one row
 per warehouse and darkstore with `is_active`, `place_of_supply`,
